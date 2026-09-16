@@ -1,0 +1,39 @@
+{
+  "mcpServers": {
+    "travel": {
+      "transport": "stdio",
+      "command": "python3",
+      "args": ["-m", "src.mcp.servers.travel_mcp_server"]
+    },
+    "travel_weather": {
+      "transport": "stdio",
+      "command": "python3",
+      "args": ["-m", "src.mcp.travelassistant.weather_server"]
+    },
+    "travel_geocoder": {
+      "transport": "stdio",
+      "command": "python3",
+      "args": ["-m", "src.mcp.travelassistant.geocoder_server"]
+    },
+    "travel_finance": {
+      "transport": "stdio",
+      "command": "python3",
+      "args": ["-m", "src.mcp.travelassistant.finance_server"]
+    },
+    "travel_events": {
+      "transport": "stdio",
+      "command": "python3",
+      "args": ["-m", "src.mcp.travelassistant.event_server"]
+    },
+    "travel_flights": {
+      "transport": "stdio",
+      "command": "python3",
+      "args": ["-m", "src.mcp.travelassistant.flight_server"]
+    },
+    "travel_hotels": {
+      "transport": "stdio",
+      "command": "python3",
+      "args": ["-m", "src.mcp.travelassistant.hotel_server"]
+    }
+  }
+}
