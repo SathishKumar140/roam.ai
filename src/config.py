@@ -49,7 +49,7 @@ def get_llm(provider: Optional[str] = None):
     """
     prov = provider or settings.DEFAULT_LLM_PROVIDER
     
-    if prov == "gemini" or (settings.GEMINI_API_KEY and not settings.OPENAI_API_KEY):
+    if settings.GEMINI_API_KEY and (prov == "gemini" or not settings.OPENAI_API_KEY):
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             return ChatGoogleGenerativeAI(
@@ -57,10 +57,10 @@ def get_llm(provider: Optional[str] = None):
                 google_api_key=settings.GEMINI_API_KEY,
                 temperature=0.4
             )
-        except ImportError:
+        except Exception:
             pass
 
-    if prov == "openai" or settings.OPENAI_API_KEY:
+    if settings.OPENAI_API_KEY and (prov == "openai" or not settings.GEMINI_API_KEY):
         try:
             from langchain_openai import ChatOpenAI
             return ChatOpenAI(
@@ -68,7 +68,7 @@ def get_llm(provider: Optional[str] = None):
                 api_key=settings.OPENAI_API_KEY,
                 temperature=0.4
             )
-        except ImportError:
+        except Exception:
             pass
 
     # Fallback to standard chat interface or dummy mock for local testing

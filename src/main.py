@@ -56,15 +56,18 @@ async def process_ambient_event(event: ChannelEvent):
     adapter = telegram_adapter if event.platform == "telegram" else whatsapp_adapter
     await adapter.send_typing(event.channel_id)
 
-    res = await ambient_companion.ainvoke({
-        "channel_id": event.channel_id,
-        "platform": event.platform,
-        "sender_name": event.sender.name,
-        "sender_id": event.sender.id,
-        "text": event.text or "",
-        "media": event.media.dict() if event.media else None,
-        "history": history
-    })
+    res = await ambient_companion.ainvoke(
+        {
+            "channel_id": event.channel_id,
+            "platform": event.platform,
+            "sender_name": event.sender.name,
+            "sender_id": event.sender.id,
+            "text": event.text or "",
+            "media": event.media.dict() if event.media else None,
+            "history": history
+        },
+        config={"configurable": {"thread_id": event.channel_id}}
+    )
 
     output_text = res.get("output", "I'm on it!")
     buttons = res.get("buttons")

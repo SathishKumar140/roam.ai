@@ -109,10 +109,13 @@ async def test_ambient_companion_skills_query():
     companion = create_ambient_companion()
 
     # Query loaded skills
-    res = await companion.ainvoke({
-        "text": "What skills do you have?",
-        "sender_name": "Dave"
-    })
+    res = await companion.ainvoke(
+        {
+            "text": "What skills do you have?",
+            "sender_name": "Dave"
+        },
+        config={"configurable": {"thread_id": "test_skills_query"}}
+    )
     output = res.get("output", "")
     assert "DeepAgents Skills Library" in output
     assert "travel_specialist" in output
@@ -121,10 +124,13 @@ async def test_ambient_companion_skills_query():
     assert "debt-simplification" in output
 
     # Query reading a specific skill
-    res_skill = await companion.ainvoke({
-        "text": "Inspect skill flight-search instructions",
-        "sender_name": "Dave"
-    })
+    res_skill = await companion.ainvoke(
+        {
+            "text": "Inspect skill flight-search instructions",
+            "sender_name": "Dave"
+        },
+        config={"configurable": {"thread_id": "test_skills_query"}}
+    )
     output_skill = res_skill.get("output", "")
     assert "# Flight Search Skill" in output_skill
     assert "search_flights" in output_skill

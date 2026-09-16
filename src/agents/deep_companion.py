@@ -86,22 +86,109 @@ def create_ambient_companion():
         }
     ]
 
+    # Only use create_deep_agent when the LLM can actually support tool-binding.
+    # FakeListChatModel and similar mocks raise NotImplementedError on bind_tools,
+    # which crashes at runtime deep inside the graph. Detect this early.
+    llm_supports_tools = False
     try:
-        from deepagents import create_deep_agent
-        return create_deep_agent(
-            model=llm,
-            system_prompt=SUPERVISOR_SYSTEM_PROMPT,
-            tools=[],
-            subagents=subagents_config,
-            skills=global_skills,
-            checkpointer=checkpointer
-        )
-    except (ImportError, Exception):
-        # Fallback to compiled StateGraph multi-agent dispatcher if deepagents is not installed
-        return FallbackMultiAgentHarness(llm, subagents_config, global_skills=global_skills)
+        from langchain_core.tools import BaseTool
+        probe_tool = BaseTool.from_function(func=lambda: None, name="probe", description="probe")
+        llm.bind_tools([probe_tool])
+        llm_supports_tools = True
+    except (NotImplementedError, AttributeError, Exception):
+        llm_supports_tools = False
+
+    if llm_supports_tools:
+        try:
+            from deepagents import create_deep_agent
+            graph = create_deep_agent(
+                model=llm,
+                system_prompt=SUPERVISOR_SYSTEM_PROMPT,
+                tools=[],
+                subagents=subagents_config,
+                skills=global_skills,
+                checkpointer=checkpointer
+            )
+            return DeepAgentCompanion(graph)
+        except (ImportError, Exception):
+            pass  # fall through to FallbackMultiAgentHarness
+
+    # Fallback to compiled StateGraph multi-agent dispatcher if deepagents is not
+    # available or no tool-capable LLM is configured (e.g. local dev without API keys)
+    return FallbackMultiAgentHarness(llm, subagents_config, global_skills=global_skills)
+
+
+class DeepAgentCompanion:
+    """
+    Thin adapter that wraps a deepagents CompiledStateGraph and exposes
+    the same ``ainvoke(event_dict, config=None)`` interface used by
+    ``FallbackMultiAgentHarness`` and the rest of the codebase.
+
+    The adapter:
+    1. Converts the channel-event dict into a rich HumanMessage prompt.
+    2. Injects a per-channel ``thread_id`` into the LangGraph config so
+       the checkpointer can persist memory across turns.
+    3. Pulls the final AI text out of the graph's ``messages`` output and
+       re-wraps it in the ``{"output": ..., "buttons": ...}`` dict the rest
+       of the codebase expects.
+    """
+
+    def __init__(self, graph):
+        self.graph = graph
+
+    def _build_human_message(self, data: Dict[str, Any]) -> HumanMessage:
+        """Serialize the event dict into a single context-rich HumanMessage."""
+        sender = data.get("sender_name", "User")
+        text = data.get("text", "")
+        platform = data.get("platform", "telegram")
+        media = data.get("media")
+        history = data.get("history", [])
+
+        parts = []
+        if history:
+            history_lines = "\n".join(
+                f"  {m.get('sender_name', 'User')}: {m.get('text', '')}"
+                for m in history[-20:]
+            )
+            parts.append(f"[Recent group chat history]\n{history_lines}")
+
+        parts.append(f"[{platform.upper()} | sender={sender}]")
+
+        if media:
+            parts.append(f"[Media attached: type={media.get('type')}, id={media.get('file_id', '')}]")
+
+        parts.append(text)
+        return HumanMessage(content="\n".join(parts))
+
+    async def ainvoke(self, data: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Invoke the deepagents graph and return a normalised output dict."""
+        channel_id = data.get("channel_id", "default")
+
+        # Build LangGraph config — always inject thread_id so the checkpointer works
+        lg_config: Dict[str, Any] = {"configurable": {"thread_id": channel_id}}
+        if config:
+            if "configurable" in config:
+                lg_config["configurable"].update(config["configurable"])
+            else:
+                lg_config.update(config)
+
+        message = self._build_human_message(data)
+        result = await self.graph.ainvoke({"messages": [message]}, config=lg_config)
+
+        # Extract final AI reply from messages list
+        messages = result.get("messages", [])
+        output_text = "I'm on it! 🚀"
+        for msg in reversed(messages):
+            content = getattr(msg, "content", None)
+            if content and not getattr(msg, "tool_calls", None):
+                output_text = content if isinstance(content, str) else str(content)
+                break
+
+        return {"output": output_text}
 
 
 class FallbackMultiAgentHarness:
+
     """
     Robust standalone multi-agent harness implementing the DeepAgent pattern
     directly with isolated tool execution, skills progressive disclosure, and deep arbitration.

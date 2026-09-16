@@ -27,13 +27,17 @@ def test_dynamic_mcp_skill_learning():
 
 async def test_ambient_companion_skill_query():
     # Ask the companion about its skills via chat
-    res = await ambient_companion.ainvoke({
-        "channel_id": "group_skills_test",
-        "platform": "telegram",
-        "sender_name": "Alice",
-        "sender_id": "u1",
-        "text": "@companion what skills and MCP servers do you have?"
-    })
+    channel = "group_skills_test"
+    res = await ambient_companion.ainvoke(
+        {
+            "channel_id": channel,
+            "platform": "telegram",
+            "sender_name": "Alice",
+            "sender_id": "u1",
+            "text": "@companion what skills and MCP servers do you have?"
+        },
+        config={"configurable": {"thread_id": channel}}
+    )
 
     assert "Active MCP Servers & Learned Skills" in res["output"]
     assert "search_flights" in res["output"]
