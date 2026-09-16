@@ -26,6 +26,13 @@ from tests.test_travelassistant_mcp import (
     test_travelassistant_events,
     test_travelassistant_flights_and_hotels,
 )
+from tests.test_deepagents_skills import (
+    test_agent_skills_validation_rules,
+    test_subagent_isolated_skills_loading,
+    test_progressive_disclosure_prompt_and_tool,
+    test_dynamic_mcp_skill_folder_creation,
+    test_ambient_companion_skills_query,
+)
 
 def run_sync_tests():
     print("Running Synchronous Unit & MCP Tests...")
@@ -75,6 +82,12 @@ def run_sync_tests():
     test_travelassistant_flights_and_hotels()
     print("  ✅ test_travelassistant_flights_and_hotels passed (Google Flights & Hotels)")
 
+    print("\nRunning DeepAgents Skills Specification & Isolation Tests...")
+    test_agent_skills_validation_rules()
+    test_subagent_isolated_skills_loading()
+    test_progressive_disclosure_prompt_and_tool()
+    test_dynamic_mcp_skill_folder_creation()
+
 async def run_async_tests():
     print("\nRunning Asynchronous Pipeline & Normalization Tests...")
     await test_telegram_message_normalization()
@@ -98,11 +111,14 @@ async def run_async_tests():
     await test_ambient_companion_skill_query()
     print("  ✅ test_ambient_companion_skill_query passed")
 
+    await test_ambient_companion_skills_query()
+    print("  ✅ test_ambient_companion_skills_query passed (DeepAgents Progressive Disclosure)")
+
 if __name__ == "__main__":
     try:
         run_sync_tests()
         asyncio.run(run_async_tests())
-        print("\n🎉 ALL 22 TESTS PASSED SUCCESSFULLY (UNIT, MCP ECOSYSTEM & SKILL-LEARNING)!")
+        print("\n🎉 ALL 27 TESTS PASSED SUCCESSFULLY (UNIT, MCP ECOSYSTEM, DEEPAGENTS SKILLS SPEC & PROGRESSIVE DISCLOSURE)!")
         sys.exit(0)
     except Exception as e:
         print(f"\n❌ Test failed: {e}")

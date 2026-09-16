@@ -8,6 +8,7 @@ from src.models.channel import ChannelEvent, OutboundMessage, InteractiveButton
 
 # Import specialized toolsets & MCP Client
 from src.mcp.client import mcp_manager
+from src.skills.loader import SkillsLoader
 from src.agents.tools.travel_tools import travel_tools
 from src.agents.tools.vision_tools import vision_tools
 from src.agents.tools.expense_tools import expense_tools
@@ -36,46 +37,52 @@ GUIDELINES:
 def create_ambient_companion():
     """
     Initializes the LangChain DeepAgent with isolated subagents and dynamic MCP tools.
-    Includes graceful compilation via LangGraph if running in an offline environment.
+    All agents strictly conform to the LangChain DeepAgents skills specification.
     """
     llm = get_llm()
     checkpointer = get_sqlite_checkpointer()
+    global_skills = ["./skills/global/"]
 
     # Discover live travel tools from MCP server (fallback to internal if server offline)
     mcp_travel_tools = mcp_manager.get_tools_for_server("travel")
     active_travel_tools = mcp_travel_tools if mcp_travel_tools else travel_tools
 
-    # Subagent definitions
+    # Subagent definitions conforming to DeepAgents custom subagent specification
     subagents_config = [
         {
             "name": "travel_specialist",
             "description": "Searches flights, accommodations, and generates day-by-day itineraries using the Travel MCP server.",
             "system_prompt": "You are an expert travel planner powered by MCP. Search flights and hotels, and balance group constraints.",
             "tools": active_travel_tools,
+            "skills": ["./skills/travel-skills/"],
         },
         {
             "name": "vision_specialist",
             "description": "Analyzes photos sent to the group (venues, menus, flyers, receipts) using multimodal vision.",
             "system_prompt": "You are a multimodal venue and scout expert. Analyze photos and provide actionable feedback.",
             "tools": vision_tools,
+            "skills": ["./skills/vision-skills/"],
         },
         {
             "name": "expense_specialist",
             "description": "Manages the group expense ledger and calculates simplified debt settlement (who owes what).",
             "system_prompt": "You are an accurate group accountant. Record expenses and calculate minimum debt settlements.",
             "tools": expense_tools,
+            "skills": ["./skills/expense-skills/"],
         },
         {
             "name": "proactive_concierge",
             "description": "Schedules and handles trip-day wake-ups, departure confirmation polls, and daily check-ins.",
             "system_prompt": "You are a proactive trip coordinator. Check in on trip morning and track journey progress.",
             "tools": proactive_tools,
+            "skills": ["./skills/concierge-skills/"],
         },
         {
             "name": "skill_specialist",
             "description": "Connects to external MCP servers to learn new skills and tools dynamically at runtime.",
             "system_prompt": "You manage dynamic skill acquisition and MCP server connections for the companion.",
             "tools": skill_learner_tools,
+            "skills": ["./skills/meta-skills/"],
         }
     ]
 
@@ -86,21 +93,40 @@ def create_ambient_companion():
             system_prompt=SUPERVISOR_SYSTEM_PROMPT,
             tools=[],
             subagents=subagents_config,
+            skills=global_skills,
             checkpointer=checkpointer
         )
     except (ImportError, Exception):
         # Fallback to compiled StateGraph multi-agent dispatcher if deepagents is not installed
-        return FallbackMultiAgentHarness(llm, subagents_config)
+        return FallbackMultiAgentHarness(llm, subagents_config, global_skills=global_skills)
 
 
 class FallbackMultiAgentHarness:
     """
     Robust standalone multi-agent harness implementing the DeepAgent pattern
-    directly with isolated tool execution and deep arbitration.
+    directly with isolated tool execution, skills progressive disclosure, and deep arbitration.
     """
-    def __init__(self, llm, subagents_config):
+    def __init__(self, llm, subagents_config: List[Dict[str, Any]], global_skills: Optional[List[str]] = None):
         self.llm = llm
-        self.subagents = {s["name"]: s for s in subagents_config}
+        self.global_skills_sources = global_skills or ["./skills/global/"]
+        self.global_skills = SkillsLoader.load_skills_from_sources(self.global_skills_sources)
+        self.global_read_tool = SkillsLoader.create_skill_inspection_tool(self.global_skills)
+        self.supervisor_system_prompt = SUPERVISOR_SYSTEM_PROMPT + SkillsLoader.format_skills_system_prompt(
+            self.global_skills, self.global_skills_sources
+        )
+
+        self.subagents = {}
+        for s in subagents_config:
+            sub = dict(s)
+            sources = sub.get("skills", [])
+            loaded_skills = SkillsLoader.load_skills_from_sources(sources)
+            sub["loaded_skills"] = loaded_skills
+            sub_read_tool = SkillsLoader.create_skill_inspection_tool(loaded_skills)
+            sub["tools"] = list(sub.get("tools", [])) + [sub_read_tool]
+            sub["system_prompt"] = sub.get("system_prompt", "") + SkillsLoader.format_skills_system_prompt(
+                loaded_skills, sources
+            )
+            self.subagents[sub["name"]] = sub
 
     async def ainvoke(self, input_data: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         channel_id = input_data.get("channel_id", "default_channel")
@@ -157,6 +183,54 @@ class FallbackMultiAgentHarness:
                 reply = sub["tools"][1].invoke({"channel_id": channel_id, "user_name": sender_name})
             return {"output": reply}
 
+        # Route to Skill Specialist or Skills Inspection
+        if any(w in text_lower for w in ["skill", "mcp", "learn", "tools", "capabilities"]):
+            sub = self.subagents["skill_specialist"]
+            if "connect" in text_lower:
+                reply = sub["tools"][0].invoke({
+                    "server_name": "custom_tools",
+                    "command": "python3",
+                    "args_json": "[\"-m\", \"src.mcp.servers.travel_mcp_server\"]"
+                })
+            elif "read" in text_lower or "inspect" in text_lower or "instruction" in text_lower:
+                # Find skill name from text
+                found_skill = None
+                for sub_name, sub_info in self.subagents.items():
+                    for s_name in sub_info.get("loaded_skills", {}).keys():
+                        if s_name.replace("-", " ") in text_lower or s_name in text_lower:
+                            found_skill = s_name
+                            read_tool = sub_info["tools"][-1]
+                            reply = read_tool.invoke({"skill_name": found_skill})
+                            break
+                    if found_skill:
+                        break
+                if not found_skill:
+                    for s_name in self.global_skills.keys():
+                        if s_name.replace("-", " ") in text_lower or s_name in text_lower:
+                            found_skill = s_name
+                            reply = self.global_read_tool.invoke({"skill_name": found_skill})
+                            break
+                if not found_skill:
+                    reply = "Specify a valid skill name to inspect (e.g., 'read skill flight-search')."
+            else:
+                lines = ["🧠 **DeepAgents Skills Library (Progressive Disclosure)**\n"]
+                lines.append(f"• **Global Supervisor Skills** (`{self.global_skills_sources[0]}`):")
+                for s_name, meta in self.global_skills.items():
+                    lines.append(f"  - `{s_name}`: {meta['description']}")
+                lines.append("")
+                for sub_name, sub_info in self.subagents.items():
+                    skills_dict = sub_info.get("loaded_skills", {})
+                    src = sub_info.get("skills", ["unknown"])[0]
+                    lines.append(f"• **`{sub_name}`** (`{src}`):")
+                    for s_name, meta in skills_dict.items():
+                        lines.append(f"  - `{s_name}`: {meta['description']}")
+                
+                # Append MCP server tools listing
+                mcp_listing = sub["tools"][1].invoke({})
+                lines.append(f"\n{mcp_listing}")
+                reply = "\n".join(lines)
+            return {"output": reply}
+
         # Route to Travel Specialist for flights, hotels, trips, vacations
         if any(w in text_lower for w in ["trip", "flight", "hotel", "itinerary", "bali", "tokyo", "vacation", "book"]):
             sub = self.subagents["travel_specialist"]
@@ -184,18 +258,6 @@ class FallbackMultiAgentHarness:
                     [InteractiveButton(id="modify_plan", label="🔄 Adjust Preferences", type="callback")]
                 ]
             }
-        # Route to Skill Specialist for dynamic MCP skill learning or capabilities list
-        if any(w in text_lower for w in ["skill", "mcp", "learn", "tools", "capabilities"]):
-            sub = self.subagents["skill_specialist"]
-            if "connect" in text_lower:
-                reply = sub["tools"][0].invoke({
-                    "server_name": "custom_tools",
-                    "command": "python3",
-                    "args_json": "[\"-m\", \"src.mcp.servers.travel_mcp_server\"]"
-                })
-            else:
-                reply = sub["tools"][1].invoke({})
-            return {"output": reply}
 
         # Default conversational response
         return {

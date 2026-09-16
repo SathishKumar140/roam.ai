@@ -35,14 +35,36 @@
 
 ```
 ambient-agent/
+├── skills/                           # Standard LangChain DeepAgents Skills
+│   ├── global/                       # Global supervisor skills
+│   │   ├── ambient-arbitration/      # Multi-party constraint compromise synthesis
+│   │   └── channel-formatting/       # Telegram & WhatsApp presentation bounds
+│   ├── travel-skills/                # travel_specialist isolated skills
+│   │   ├── flight-search/            # Google Flights query & price filtering
+│   │   ├── hotel-finder/             # Accommodation discovery with rating filters
+│   │   ├── weather-forecasting/      # Open-Meteo & NWS forecasts
+│   │   └── itinerary-synthesis/      # Multi-day geographically clustered plans
+│   ├── vision-skills/                # vision_specialist isolated skills
+│   │   ├── venue-facade-scouting/    # Storefront recognition & rating checks
+│   │   └── menu-receipt-ocr/         # Dish & bill itemization
+│   ├── expense-skills/               # expense_specialist isolated skills
+│   │   ├── debt-simplification/      # Splitwise bipartite net balance algorithm
+│   │   └── currency-conversion/      # Multi-currency FX normalization
+│   ├── concierge-skills/             # proactive_concierge isolated skills
+│   │   ├── departure-state-machine/  # Trip lifecycle & departure mornings
+│   │   └── group-polling/            # Consensus tap-to-vote quick actions
+│   └── meta-skills/                  # skill_specialist isolated skills
+│       └── mcp-acquisition/          # Dynamic MCP handshake & SKILL.md creation
 ├── src/
 │   ├── config.py                     # App settings & LLM provider factory
 │   ├── mcp/                          # Model Context Protocol (MCP) Subsystem
 │   │   ├── config.json               # Declared MCP servers
 │   │   ├── client.py                 # Multi-server MCP client & LangChain tool wrapper
+│   │   ├── travelassistant/          # skarlekar/mcp_travelassistant 6-server ecosystem
 │   │   └── servers/
 │   │       └── travel_mcp_server.py  # Standalone Travel MCP Server (JSON-RPC over stdio)
 │   ├── skills/
+│   │   ├── loader.py                 # DeepAgents SkillsLoader & Progressive Disclosure
 │   │   └── mcp_skill_learner.py      # Dynamic runtime MCP skill acquisition engine
 │   ├── models/
 │   │   ├── channel.py                # ChannelEvent & OutboundMessage schemas
@@ -71,6 +93,8 @@ ambient-agent/
 │   ├── test_mcp_travel_server.py     # Standalone MCP server JSON-RPC tests
 │   ├── test_mcp_client.py            # MCP Client tool discovery & execution tests
 │   ├── test_mcp_dynamic_learning.py  # Dynamic MCP skill learning tests
+│   ├── test_travelassistant_mcp.py   # skarlekar/mcp_travelassistant 6 servers tests
+│   ├── test_deepagents_skills.py     # DeepAgents Skills specification & isolation tests
 │   └── test_companion_pipeline.py    # End-to-end ambient pipeline tests
 └── requirements.txt
 ```
