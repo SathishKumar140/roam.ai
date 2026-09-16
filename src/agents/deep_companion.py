@@ -91,11 +91,19 @@ def create_ambient_companion():
     # which crashes at runtime deep inside the graph. Detect this early.
     llm_supports_tools = False
     try:
-        from langchain_core.tools import BaseTool
-        probe_tool = BaseTool.from_function(func=lambda: None, name="probe", description="probe")
-        llm.bind_tools([probe_tool])
+        from langchain_core.tools import tool as _tool
+
+        @_tool
+        def _probe() -> str:
+            """Probe tool for bind_tools capability check."""
+            return "ok"
+
+        llm.bind_tools([_probe])
         llm_supports_tools = True
-    except (NotImplementedError, AttributeError, Exception):
+    except NotImplementedError:
+        llm_supports_tools = False
+    except Exception:
+        # Unexpected error — still consider tools unsupported to be safe
         llm_supports_tools = False
 
     if llm_supports_tools:
