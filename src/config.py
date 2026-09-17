@@ -17,7 +17,7 @@ class Settings(BaseModel):
     
     # Gemini
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
 
     # OpenAI
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
@@ -38,6 +38,11 @@ class Settings(BaseModel):
     # Storage paths
     SQLITE_DB_PATH: str = os.getenv("SQLITE_DB_PATH", "ambient_companion.db")
     CHECKPOINT_DB_PATH: str = os.getenv("CHECKPOINT_DB_PATH", "agent_memory.db")
+
+    # Langfuse Tracing & Observability
+    LANGFUSE_PUBLIC_KEY: Optional[str] = os.getenv("LANGFUSE_PUBLIC_KEY")
+    LANGFUSE_SECRET_KEY: Optional[str] = os.getenv("LANGFUSE_SECRET_KEY")
+    LANGFUSE_HOST: str = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
 
 settings = Settings()
 

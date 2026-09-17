@@ -3,9 +3,12 @@ import json
 import os
 import subprocess
 import sys
+import logging
 from typing import Dict, Any, List, Optional
 from langchain_core.tools import StructuredTool
 from pydantic import create_model, Field
+
+logger = logging.getLogger("roam.ai.mcp")
 
 class MCPProcessConnection:
     """Manages a single MCP server running as a local subprocess over stdio."""
@@ -24,11 +27,12 @@ class MCPProcessConnection:
         cwd = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
         env["PYTHONPATH"] = cwd + (f":{env['PYTHONPATH']}" if "PYTHONPATH" in env else "")
 
+        cmd = sys.executable if self.command in ("python3", "python") else self.command
         self.proc = subprocess.Popen(
-            [self.command] + self.args,
+            [cmd] + self.args,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=None,  # Stream server logs and errors straight to console/uvicorn
             text=True,
             bufsize=1,
             cwd=cwd,
@@ -78,6 +82,8 @@ class MCPProcessConnection:
         return json.loads(line.strip())
 
     def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> str:
+        formatted_args = json.dumps(arguments, indent=2)
+        logger.info(f"\n==================== [MCP CALL: {self.name} -> {tool_name}] ====================\nArguments:\n{formatted_args}")
         self._send_request("tools/call", {
             "name": tool_name,
             "arguments": arguments
@@ -85,8 +91,17 @@ class MCPProcessConnection:
         res = self._read_response()
         content = res.get("result", {}).get("content", [])
         if content and len(content) > 0:
-            return content[0].get("text", "")
-        return json.dumps(res)
+            output_text = content[0].get("text", "")
+            try:
+                parsed = json.loads(output_text)
+                pretty_output = json.dumps(parsed, indent=2)
+            except Exception:
+                pretty_output = output_text
+            logger.info(f"\n==================== [MCP RESULT: {self.name} -> {tool_name}] ====================\nPayload ({len(output_text)} chars):\n{pretty_output}\n=======================================================================")
+            return output_text
+        out_json = json.dumps(res, indent=2)
+        logger.info(f"\n==================== [MCP RESULT (RAW): {self.name} -> {tool_name}] ====================\n{out_json}\n=======================================================================")
+        return out_json
 
     def close(self):
         if self.proc:
@@ -122,6 +137,14 @@ class MCPClientManager:
                     command=srv_conf.get("command", "python3"),
                     args=srv_conf.get("args", [])
                 )
+
+        # Ensure the travel_flights MCP server pointing to flight_server.py is connected
+        if "travel_flights" not in self.connections:
+            self.connect_server(
+                name="travel_flights",
+                command="python3",
+                args=["-m", "src.mcp.travelassistant.flight_server"]
+            )
 
     def connect_server(self, name: str, command: str, args: List[str]) -> List[StructuredTool]:
         """Connects to an MCP server, retrieves its tools, and wraps them for LangChain."""
@@ -183,7 +206,30 @@ class MCPClientManager:
             all_tools.extend(tools)
         return all_tools
 
+    def get_travel_tools(self) -> List[StructuredTool]:
+        """
+        Returns unified travel tools with search_flights specifically powered
+        by the Google Flights MCP server (src/mcp/travelassistant/flight_server.py).
+        """
+        tools = []
+        # Real-time Google Flights tool from travel_flights (flight_server.py)
+        flight_tools = self.server_tools.get("travel_flights", [])
+        if flight_tools:
+            tools.extend(flight_tools)
+
+        # Other travel tools (hotels, itinerary) from travel server
+        other_travel_tools = self.server_tools.get("travel", [])
+        for t in other_travel_tools:
+            # If flight_tools from flight_server is present, don't duplicate search_flights
+            if t.name == "search_flights" and flight_tools:
+                continue
+            tools.append(t)
+
+        return tools
+
     def get_tools_for_server(self, server_name: str) -> List[StructuredTool]:
+        if server_name == "travel":
+            return self.get_travel_tools()
         return self.server_tools.get(server_name, [])
 
     def shutdown(self):
@@ -192,3 +238,4 @@ class MCPClientManager:
 
 # Global MCP Client Manager instance
 mcp_manager = MCPClientManager()
+
