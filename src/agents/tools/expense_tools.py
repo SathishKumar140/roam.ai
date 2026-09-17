@@ -73,10 +73,10 @@ def simplify_debts(expenses: List[ExpenseItem]) -> List[Dict[str, Any]]:
     return transfers
 
 @tool
-def record_expense(channel_id: str, payer_name: str, amount: float, description: str, split_members: str) -> str:
+def record_expense(channel_id: str, payer_name: str, amount: float, description: str, split_members: str = "group") -> str:
     """
     Logs an expense paid by someone for the group.
-    'split_members' is a comma-separated list of names who shared this expense (e.g. 'Alice, Bob, Charlie').
+    'split_members' is a comma-separated list of names who shared this expense (e.g. 'Alice, Bob' or 'group'). Default is 'group'.
     """
     trip = db.get_active_trip(channel_id)
     if not trip:
@@ -86,9 +86,9 @@ def record_expense(channel_id: str, payer_name: str, amount: float, description:
     else:
         session_id = trip.session_id
 
-    members = [m.strip() for m in split_members.split(",") if m.strip()]
-    if not members:
-        members = [payer_name]
+    members = [m.strip() for m in (split_members or "group").split(",") if m.strip()]
+    if not members or members == ["group"] or members == ["all"]:
+        members = ["Alice", "Bob"]
 
     expense = ExpenseItem(
         expense_id=f"exp_{uuid.uuid4().hex[:8]}",

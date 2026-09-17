@@ -48,7 +48,10 @@ class Settings(BaseModel):
     # Langfuse Tracing & Observability
     LANGFUSE_PUBLIC_KEY: Optional[str] = os.getenv("LANGFUSE_PUBLIC_KEY")
     LANGFUSE_SECRET_KEY: Optional[str] = os.getenv("LANGFUSE_SECRET_KEY")
-    LANGFUSE_HOST: str = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+    LANGFUSE_HOST: str = os.getenv("LANGFUSE_HOST") or os.getenv("LANGFUSE_BASE_URL", "https://cloud.langfuse.com")
+
+    # Search & Live APIs (Google Flights, Hotels & Events via SerpApi)
+    SERPAPI_KEY: Optional[str] = os.getenv("SERPAPI_KEY") or os.getenv("SERP_API_KEY")
 
 settings = Settings()
 

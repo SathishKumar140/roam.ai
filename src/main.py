@@ -167,7 +167,8 @@ async def api_chat(payload: dict):
     return {
         "responded": True,
         "output": output,
-        "buttons": res.get("buttons")
+        "buttons": res.get("buttons"),
+        "tool_calls": res.get("tool_calls", [])
     }
 
 # ------------------------------------------------------------------------------

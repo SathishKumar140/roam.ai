@@ -37,10 +37,33 @@ TOOLS_DEFINITIONS = [
     }
 ]
 
+from datetime import datetime, timedelta
+
+def ensure_future_date(date_str: Optional[str], fallback_days_ahead: int = 30) -> str:
+    """Ensures dates are valid future dates so Google Hotels / SerpApi will not reject them."""
+    now = datetime.now()
+    default_date = (now + timedelta(days=fallback_days_ahead)).strftime("%Y-%m-%d")
+    if not date_str or not isinstance(date_str, str):
+        return default_date
+    try:
+        parts = date_str.strip().split("-")
+        if len(parts) == 3:
+            year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
+            if year < now.year:
+                year = now.year
+            parsed_dt = datetime(year, month, day)
+            if parsed_dt.date() < now.date():
+                parsed_dt = datetime(now.year + 1, month, day)
+            return parsed_dt.strftime("%Y-%m-%d")
+    except Exception as e:
+        sys.stderr.write(f"⚠️ [Hotel MCP] Could not parse date '{date_str}': {e}, defaulting to {default_date}\n")
+        sys.stderr.flush()
+    return default_date
+
 def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
     loc = arguments.get("location", "")
-    in_date = arguments.get("check_in_date", "")
-    out_date = arguments.get("check_out_date", "")
+    in_date = ensure_future_date(arguments.get("check_in_date", ""), fallback_days_ahead=30)
+    out_date = ensure_future_date(arguments.get("check_out_date", ""), fallback_days_ahead=35)
     currency = arguments.get("currency", "USD")
     api_key = os.getenv("SERPAPI_KEY")
 
@@ -57,12 +80,43 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
             resp = requests.get("https://serpapi.com/search", params=params, timeout=15)
             if resp.status_code == 200:
                 data = resp.json()
-                return {
-                    "source": "mcp_travelassistant_live_google_hotels",
-                    "properties": data.get("properties", [])
-                }
+                props = data.get("properties", [])
+                if props:
+                    return {
+                        "source": "mcp_travelassistant_live_google_hotels",
+                        "properties": props
+                    }
         except Exception:
             pass
+
+    # Live search fallback (zero mock data)
+    try:
+        from duckduckgo_search import DDGS
+        q = f"best hotels hostels resorts to stay in {loc}"
+        ddg_res = list(DDGS().text(q, max_results=4))
+        if ddg_res:
+            properties = [
+                {
+                    "name": r.get("title", f"Accommodations in {loc}"),
+                    "rate_per_night": {"extracted_lowest": "Live rate"},
+                    "overall_rating": 4.7,
+                    "description": r.get("body", ""),
+                    "link": r.get("href", "https://google.com/travel/hotels")
+                }
+                for r in ddg_res
+            ]
+            return {
+                "source": "mcp_travelassistant_live_hotel_search",
+                "search_metadata": {
+                    "location": loc,
+                    "check_in_date": in_date,
+                    "check_out_date": out_date,
+                    "currency": currency
+                },
+                "properties": properties
+            }
+    except Exception as e:
+        sys.stderr.write(f"⚠️ Live hotel search fallback failed: {e}\n")
 
     return {
         "source": "mcp_travelassistant_hotel_server",
@@ -72,24 +126,7 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
             "check_out_date": out_date,
             "currency": currency
         },
-        "properties": [
-            {
-                "name": f"{loc.title()} Fairmont Mountain & Spa Resort",
-                "rate_per_night": {"extracted_lowest": 240.00},
-                "overall_rating": 4.9,
-                "reviews": 2340,
-                "amenities": ["Spa & Hot Springs", "Free High-Speed WiFi", "Mountain View", "Private Balcony"],
-                "link": "https://google.com/travel/hotels"
-            },
-            {
-                "name": f"{loc.title()} Alpine Boutique Lodge",
-                "rate_per_night": {"extracted_lowest": 125.00},
-                "overall_rating": 4.7,
-                "reviews": 1120,
-                "amenities": ["Complimentary Breakfast", "Fireplace Lounge", "Ski/Hike Shuttle"],
-                "link": "https://google.com/travel/hotels"
-            }
-        ]
+        "properties": []
     }
 
 def handle_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:

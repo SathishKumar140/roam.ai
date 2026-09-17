@@ -1,7 +1,16 @@
-#!/usr/bin/env python3
 import sys
+import os
 import json
+from pathlib import Path
 from typing import Dict, Any, List
+from dotenv import load_dotenv
+
+# Ensure project root is in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+load_dotenv(PROJECT_ROOT / ".env")
 
 TOOLS_DEFINITIONS = [
     {
@@ -49,101 +58,62 @@ TOOLS_DEFINITIONS = [
 
 def handle_tool_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     if name == "search_flights":
-        origin = arguments.get("origin", "").upper()
-        dest = arguments.get("destination", "").upper()
+        origin = arguments.get("origin", "")
+        dest = arguments.get("destination", "")
         date = arguments.get("date", "")
-        max_budget = arguments.get("max_budget")
-
-        dest_clean = dest.upper().strip()
-        if any(k in dest_clean for k in ["TYO", "TOK", "HND", "NRT", "JAPAN"]):
-            sample_flights = [
-                {"flight": "SQ 638", "airline": "Singapore Airlines", "dep": "23:55", "arr": "08:00 (+1)", "price": 480.00},
-                {"flight": "NH 844", "airline": "All Nippon Airways (ANA)", "dep": "06:10", "arr": "14:20", "price": 450.00},
-                {"flight": "JL 38", "airline": "Japan Airlines", "dep": "02:15", "arr": "10:10", "price": 465.00},
-                {"flight": "TR 808", "airline": "Scoot", "dep": "01:25", "arr": "09:05", "price": 240.00}
-            ]
-        elif any(k in dest_clean for k in ["DPS", "BALI", "INDONESIA"]):
-            sample_flights = [
-                {"flight": "SQ 942", "airline": "Singapore Airlines", "dep": "09:15", "arr": "12:05", "price": 185.00},
-                {"flight": "GA 841", "airline": "Garuda Indonesia", "dep": "14:30", "arr": "17:15", "price": 140.00},
-                {"flight": "TR 288", "airline": "Scoot", "dep": "19:00", "arr": "21:40", "price": 95.00}
-            ]
-        elif any(k in dest_clean for k in ["PAR", "CDG", "LON", "LHR", "NYC", "JFK"]):
-            sample_flights = [
-                {"flight": "SQ 306", "airline": "Singapore Airlines", "dep": "01:10", "arr": "07:45", "price": 780.00},
-                {"flight": "BA 12", "airline": "British Airways", "dep": "23:15", "arr": "05:55 (+1)", "price": 720.00},
-                {"flight": "QR 945", "airline": "Qatar Airways", "dep": "02:30", "arr": "12:45", "price": 610.00}
-            ]
-        else:
-            sample_flights = [
-                {"flight": f"SQ {dest_clean[:3]}", "airline": "Singapore Airlines", "dep": "08:30", "arr": "13:45", "price": 380.00},
-                {"flight": f"TR {dest_clean[:3]}", "airline": "Scoot", "dep": "16:20", "arr": "21:30", "price": 180.00}
-            ]
-        if max_budget:
-            filtered = [f for f in sample_flights if f["price"] <= max_budget]
-        else:
-            filtered = sample_flights
-
-        result = {
-            "source": "Travel-MCP-Server",
-            "route": f"{origin} -> {dest}",
-            "date": date,
-            "flights": filtered or sample_flights
-        }
-        return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+        try:
+            from src.mcp.travelassistant.flight_server import search_flights_handler
+            res = search_flights_handler({
+                "departure_id": origin,
+                "arrival_id": dest,
+                "outbound_date": date
+            })
+            res["source"] = "Travel-MCP-Server"
+            if "flights" not in res or not res["flights"]:
+                res["flights"] = res.get("best_flights") or res.get("other_flights") or []
+            return {"content": [{"type": "text", "text": json.dumps(res, indent=2)}]}
+        except Exception as e:
+            fallback = {
+                "source": "Travel-MCP-Server",
+                "route": f"{origin}->{dest}",
+                "date": date,
+                "flights": [],
+                "error": str(e)
+            }
+            return {"content": [{"type": "text", "text": json.dumps(fallback)}]}
 
     elif name == "search_hotels":
         dest = arguments.get("destination", "")
-        max_price = arguments.get("max_price")
-        options = [
-            {
-                "name": f"{dest.title()} Oceanfront Villa & Pool",
-                "price_per_night": 135.00,
-                "rating": 4.9,
-                "amenities": ["Infinity Pool", "Free Breakfast", "Beach Access"]
-            },
-            {
-                "name": f"{dest.title()} Heritage Boutique Suites",
-                "price_per_night": 80.00,
-                "rating": 4.7,
-                "amenities": ["Central Location", "AC", "Kitchenette"]
-            }
-        ]
-        if max_price:
-            filtered = [h for h in options if h["price_per_night"] <= max_price]
-        else:
-            filtered = options
-
-        result = {
-            "source": "Travel-MCP-Server",
-            "destination": dest,
-            "hotels": filtered or options
-        }
-        return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+        checkin = arguments.get("checkin_date", "")
+        checkout = arguments.get("checkout_date", "")
+        try:
+            from src.mcp.travelassistant.hotel_server import search_hotels_handler
+            res = search_hotels_handler({
+                "location": dest,
+                "check_in_date": checkin,
+                "check_out_date": checkout
+            })
+            return {"content": [{"type": "text", "text": json.dumps(res, indent=2)}]}
+        except Exception as e:
+            return {"content": [{"type": "text", "text": json.dumps({"source": "travel_mcp", "destination": dest, "error": str(e)})}]}
 
     elif name == "generate_itinerary":
         dest = arguments.get("destination", "")
         days = arguments.get("days", 3)
-        pref = arguments.get("preferences", "general exploration")
-        result = {
-            "source": "Travel-MCP-Server",
-            "destination": dest,
-            "days": days,
-            "preferences": pref,
-            "schedule": [
-                {
-                    "day": 1,
-                    "theme": "Arrival, Beachfront Relaxation & Group Dinner",
-                    "activities": ["Airport transfer & villa check-in", "Sunset cocktail lounge", "Seafood/vegan dinner"]
-                },
-                {
-                    "day": 2,
-                    "theme": "Culture & Island Highlights",
-                    "activities": ["Morning cultural landmark tour", "Local food market", "Evening pool party"]
-                }
-            ]
-        }
-        return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+        pref = arguments.get("preferences", "")
+        try:
+            from duckduckgo_search import DDGS
+            q = f"best {days} day itinerary route attractions {dest} {pref}".strip()
+            results = list(DDGS().text(q, max_results=4))
+            res = {
+                "source": "Travel-MCP-Server-Live",
+                "destination": dest,
+                "days": days,
+                "highlights": [{"title": r.get("title"), "snippet": r.get("body"), "link": r.get("href")} for r in results]
+            }
+            return {"content": [{"type": "text", "text": json.dumps(res, indent=2)}]}
+        except Exception as e:
+            return {"content": [{"type": "text", "text": json.dumps({"source": "travel_mcp", "destination": dest, "error": str(e)})}]}
 
     else:
         return {"isError": True, "content": [{"type": "text", "text": f"Unknown tool: {name}"}]}

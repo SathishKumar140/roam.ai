@@ -191,7 +191,15 @@ class MCPClientManager:
         args_schema = create_model(f"{tool_name}_Args", **fields) if fields else None
 
         def _runner(**kwargs):
-            return conn.call_tool(tool_name, kwargs)
+            logger.info(f"🛠️ [MCP Tool Invoked] Server '{conn.name}' -> Tool '{tool_name}' with args: {kwargs}")
+            try:
+                res = conn.call_tool(tool_name, kwargs)
+                res_str = str(res)
+                logger.info(f"✨ [MCP Tool Success] '{tool_name}' returned ({len(res_str)} chars). Preview: {res_str[:120].strip()}...")
+                return res
+            except Exception as e:
+                logger.error(f"❌ [MCP Tool Error] '{tool_name}' failed: {e}")
+                raise
 
         return StructuredTool.from_function(
             func=_runner,
@@ -208,22 +216,24 @@ class MCPClientManager:
 
     def get_travel_tools(self) -> List[StructuredTool]:
         """
-        Returns unified travel tools with search_flights specifically powered
-        by the Google Flights MCP server (src/mcp/travelassistant/flight_server.py).
+        Returns unified live travel tools powered by SerpApi Google Flights, Google Hotels,
+        Open-Meteo Weather, Local Events, and Currency conversion.
         """
         tools = []
-        # Real-time Google Flights tool from travel_flights (flight_server.py)
-        flight_tools = self.server_tools.get("travel_flights", [])
-        if flight_tools:
-            tools.extend(flight_tools)
+        seen_names = set()
 
-        # Other travel tools (hotels, itinerary) from travel server
-        other_travel_tools = self.server_tools.get("travel", [])
-        for t in other_travel_tools:
-            # If flight_tools from flight_server is present, don't duplicate search_flights
-            if t.name == "search_flights" and flight_tools:
-                continue
-            tools.append(t)
+        # Add all specialized live travel assistant tools first
+        for srv in ["travel_flights", "travel_hotels", "travel_events", "travel_weather", "travel_finance"]:
+            for t in self.server_tools.get(srv, []):
+                if t.name not in seen_names:
+                    tools.append(t)
+                    seen_names.add(t.name)
+
+        # Other travel tools from travel server (e.g. generate_itinerary)
+        for t in self.server_tools.get("travel", []):
+            if t.name not in seen_names:
+                tools.append(t)
+                seen_names.add(t.name)
 
         return tools
 

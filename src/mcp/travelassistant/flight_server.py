@@ -52,9 +52,20 @@ CITY_TO_IATA = {
     "CHENNAI": "MAA",
     "MAA": "MAA",
     "HYDERABAD": "HYD",
-    "HYD": "HYD",
     "KOLKATA": "CCU",
-    "CCU": "CCU"
+    "CCU": "CCU",
+    "HANOI": "HAN",
+    "HAN": "HAN",
+    "HO CHI MINH": "SGN",
+    "SAIGON": "SGN",
+    "SGN": "SGN",
+    "DA NANG": "DAD",
+    "DAD": "DAD",
+    "VIETNAM": "HAN",
+    "HA GIANG": "HAN",
+    "GIANG LOOP": "HAN",
+    "PHUKET": "HKT",
+    "HKT": "HKT"
 }
 
 from datetime import datetime, timedelta
@@ -204,6 +215,8 @@ def search_flights_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                     "date": date,
                     "currency": currency,
                     "price_insights": data.get("price_insights", {}),
+                    "best_flights": best,
+                    "other_flights": other,
                     "flights": all_flights
                 }
             else:
@@ -213,34 +226,42 @@ def search_flights_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
             sys.stderr.write(f"⚠️ [Live Google Flights] SerpApi request failed: {e}\n")
             sys.stderr.flush()
 
-    # Dynamic route-aware carrier schedule fallback
-    sys.stderr.write(f"ℹ️ [Flight MCP] Returning standard carrier schedule for route {dep} -> {arr}\n")
-    sys.stderr.flush()
-    if any(k in arr for k in ["TYO", "TOK", "HND", "NRT", "JAPAN"]):
-        sample_flights = [
-            {"flight": "SQ 638", "airline": "Singapore Airlines", "dep": "23:55", "arr": "08:00 (+1)", "price": 480.00},
-            {"flight": "NH 844", "airline": "All Nippon Airways (ANA)", "dep": "06:10", "arr": "14:20", "price": 450.00},
-            {"flight": "JL 38", "airline": "Japan Airlines", "dep": "02:15", "arr": "10:10", "price": 465.00},
-            {"flight": "TR 808", "airline": "Scoot", "dep": "01:25", "arr": "09:05", "price": 240.00}
-        ]
-    elif any(k in arr for k in ["DPS", "BALI", "INDONESIA"]):
-        sample_flights = [
-            {"flight": "SQ 942", "airline": "Singapore Airlines", "dep": "09:15", "arr": "12:05", "price": 185.00},
-            {"flight": "GA 841", "airline": "Garuda Indonesia", "dep": "14:30", "arr": "17:15", "price": 140.00},
-            {"flight": "TR 288", "airline": "Scoot", "dep": "19:00", "arr": "21:40", "price": 95.00}
-        ]
-    else:
-        sample_flights = [
-            {"flight": f"SQ {arr[:3]}", "airline": "Singapore Airlines", "dep": "08:30", "arr": "13:45", "price": 380.00},
-            {"flight": f"TR {arr[:3]}", "airline": "Scoot", "dep": "16:20", "arr": "21:30", "price": 180.00}
-        ]
+    # Live search fallback (zero mock data)
+    try:
+        from duckduckgo_search import DDGS
+        q = f"flights from {dep} to {arr} {date}"
+        ddg_res = list(DDGS().text(q, max_results=3))
+        if ddg_res:
+            flights = [
+                {
+                    "flight": r.get("title", f"Flight {dep}->{arr}"),
+                    "airline": r.get("title", "").split("-")[0].strip() if "-" in r.get("title", "") else "Scheduled Airline",
+                    "dep": "See live link",
+                    "arr": "See live link",
+                    "price": "Live market rate",
+                    "link": r.get("href", "")
+                }
+                for r in ddg_res
+            ]
+            return {
+                "source": "mcp_travelassistant_live_flights_search",
+                "route": f"{dep} -> {arr}",
+                "date": date,
+                "currency": currency,
+                "best_flights": flights,
+                "flights": flights
+            }
+    except Exception as e:
+        sys.stderr.write(f"⚠️ Live flight search fallback failed: {e}\n")
 
     return {
         "source": "mcp_travelassistant_flight_server",
         "route": f"{dep} -> {arr}",
         "date": date,
         "currency": currency,
-        "flights": sample_flights
+        "best_flights": [],
+        "flights": [],
+        "message": f"No live flights found for route {dep} -> {arr} on {date}. Please verify airport codes or try alternative dates."
     }
 
 def search_cheapest_flights_in_month_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:

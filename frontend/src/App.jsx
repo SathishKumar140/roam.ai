@@ -33,10 +33,18 @@ export default function App() {
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [channelId] = useState('group_tokyo_summer')
+  const messagesScrollRef = useRef(null)
   const messagesEndRef = useRef(null)
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (messagesScrollRef.current) {
+      messagesScrollRef.current.scrollTo({
+        top: messagesScrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      })
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }
 
   useEffect(() => {
@@ -83,7 +91,8 @@ export default function App() {
           isRoamAI: true,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           text: data.output,
-          buttons: data.buttons ? data.buttons.flat() : []
+          buttons: data.buttons ? data.buttons.flat() : [],
+          toolCalls: data.tool_calls || []
         }
         setMessages((prev) => [...prev, aiMsg])
       }
@@ -186,7 +195,7 @@ export default function App() {
 
         {/* Chat Feed */}
         <section className="chat-workspace">
-          <div className="messages-scroll">
+          <div className="messages-scroll" ref={messagesScrollRef}>
             {messages.map((msg) => (
               <div key={msg.id} className="message-row">
                 <div
@@ -211,6 +220,19 @@ export default function App() {
                     <span className="msg-timestamp">{msg.time}</span>
                   </div>
                   <div className={`bubble ${msg.isRoamAI ? 'bubble-roamai' : 'bubble-user'}`}>
+                    {msg.toolCalls && msg.toolCalls.length > 0 && (
+                      <div className="tool-calls-header">
+                        <span className="tool-pulse-dot"></span>
+                        <span className="tool-calls-label">Live Tools Executed:</span>
+                        <div className="tool-tags">
+                          {msg.toolCalls.map((tc, idx) => (
+                            <span key={idx} className="tool-pill" title={JSON.stringify(tc.args)}>
+                              ⚡ {tc.name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="markdown-content">
                       <ReactMarkdown remarkPlugins={[[remarkGfm, { singleTilde: false }]]}>
                         {msg.text}
