@@ -1,12 +1,12 @@
-# 🌍 RoamAI: Omnichannel Ambient Group Concierge
+# 🌍 RoamAI: Omnichannel
 
-> A privacy-conscious, multi-channel ambient group companion built with **LangChain DeepAgent**, **Model Context Protocol (MCP)**, **LangGraph**, and a **100% free-tier / local stack** (SQLite, DuckDuckGo, APScheduler).
+> A privacy-conscious, multi-channel  group companion built with **LangChain DeepAgent**, **Model Context Protocol (MCP)**, **LangGraph**, and a **100% free-tier / local stack** (SQLite, DuckDuckGo, APScheduler).
 
 ---
 
 ## 🌟 Key Features
 
-1. **Ambient "Silent Sentry" Listening**: Sits quietly in Telegram and WhatsApp group chats. Passively logs messages to a local SQLite sliding-window buffer (`group_messages`) in $< 15$ ms without spamming the chat.
+1. ** "Silent Sentry" Listening**: Sits quietly in Telegram and WhatsApp group chats. Passively logs messages to a local SQLite sliding-window buffer (`group_messages`) in $< 15$ ms without spamming the chat.
 2. **Model Context Protocol (MCP) Architecture**:
    - Instead of hard-coded proprietary tools, domain capabilities run on standard **MCP Servers**.
    - Includes a standalone **Travel MCP Server** (`src/mcp/servers/travel_mcp_server.py`) serving flight discovery, hotel booking, and itinerary synthesis via JSON-RPC 2.0.
@@ -34,10 +34,10 @@
 ## 📁 Architecture Overview
 
 ```
-ambient-agent/
+-agent/
 ├── skills/                           # Standard LangChain DeepAgents Skills
 │   ├── global/                       # Global supervisor skills
-│   │   ├── ambient-arbitration/      # Multi-party constraint compromise synthesis
+│   │   ├── -arbitration/      # Multi-party constraint compromise synthesis
 │   │   └── channel-formatting/       # Telegram & WhatsApp presentation bounds
 │   ├── travel-skills/                # travel_specialist isolated skills
 │   │   ├── flight-search/            # Google Flights query & price filtering
@@ -95,7 +95,7 @@ ambient-agent/
 │   ├── test_mcp_dynamic_learning.py  # Dynamic MCP skill learning tests
 │   ├── test_travelassistant_mcp.py   # skarlekar/mcp_travelassistant 6 servers tests
 │   ├── test_deepagents_skills.py     # DeepAgents Skills specification & isolation tests
-│   └── test_companion_pipeline.py    # End-to-end ambient pipeline tests
+│   └── test_companion_pipeline.py    # End-to-end  pipeline tests
 └── requirements.txt
 ```
 
@@ -136,7 +136,7 @@ def find_movie_showtimes(city: str, date: str) -> str:
     """Finds current movie showtimes in nearby cinemas."""
     return f"Showtimes in {city} for {date}: Dune 2 (7:00 PM), Interstellar (8:30 PM)."
 
-# Add to subagents_config in create_ambient_companion():
+# Add to subagents_config in create__companion():
 {
     "name": "movie_specialist",
     "description": "Finds movie showtimes and coordinates cinema outings.",

@@ -7,6 +7,7 @@ except Exception:
 import re
 import json
 import logging
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
@@ -26,17 +27,39 @@ from src.agents.tools.expense_tools import expense_tools
 from src.agents.tools.proactive_tools import proactive_tools
 from src.skills.mcp_skill_learner import skill_learner_tools
 
-SUPERVISOR_SYSTEM_PROMPT = """You are an Ambient Group Concierge and Companion living inside Telegram and WhatsApp group chats.
+def _build_supervisor_system_prompt() -> str:
+    """Returns the supervisor system prompt with the real current date/time injected."""
+    now_utc = datetime.now(timezone(timedelta(hours=8)))  # SGT UTC+8
+    today_str = now_utc.strftime("%A, %d %B %Y")            # e.g. "Thursday, 17 September 2026"
+    next_month_str = (now_utc.replace(day=1) + timedelta(days=32)).strftime("%B %Y")  # e.g. "October 2026"
+
+    return f"""You are an Group Concierge and Companion living inside Telegram and WhatsApp group chats.
 You operate on an open Model Context Protocol (MCP) architecture and possess deep thinking capabilities to review group conversations, identify individual constraints, and orchestrate actions.
 
+## CURRENT CALENDAR CONTEXT:
+- Today is: {today_str} (Year {now_utc.year}, SGT UTC+8)
+- "Next month" means: {next_month_str}
+- ALWAYS use the real current year {now_utc.year} in any date reasoning. NEVER use 2025 or any past year.
+
+## HANDLING TRAVEL REQUESTS & DATE REASONING:
+1. **WHEN ASKED TO FIND CHEAPEST / SUGGEST DATES** (e.g. "find the cheapest and suggest the dates", "cheapest 5 days next month", "when is it cheapest to fly?"):
+   - **DO NOT REFUSE!** NEVER say "As an AI, I cannot choose dates for you".
+   - Consult 'travel_specialist' to scan the month across Google Flights using `search_cheapest_flights_in_month`.
+   - Proactively recommend the cheapest travel window found, show price comparisons across the month, and present the best flight options!
+2. **WHEN DATES & ROUTE ARE SPECIFIC** (e.g. "Fly Oct 15 to Oct 22"):
+   - Consult 'travel_specialist' to search live flights for those exact dates.
+3. **WHEN DETAILS ARE MISSING & NO BEST-DATE SEARCH REQUESTED**:
+   - If the user asks for flights but gave neither specific dates nor asked to find the cheapest dates across a timeframe, politely ask for clarification (dates and departure city).
+
 You have access to 5 specialized sub-agents with dedicated, isolated context windows:
-1. 'travel_specialist': Powered by the Travel MCP Server. Searches flights, accommodations, and builds balanced day-by-day itineraries.
+1. 'travel_specialist': Powered by the Travel MCP Server. Searches live flights via Google Flights, scans entire months to discover the cheapest travel dates, finds hotels, and synthesizes itineraries.
 2. 'vision_specialist': Analyzes photos of venues, flyers, menus, and receipts with real-time ratings.
 3. 'expense_specialist': Tracks group expenses and calculates simplified debt settlement (who owes what).
 4. 'proactive_concierge': Manages trip lifecycle states, departures, and wake-up confirmation polls.
 5. 'skill_specialist': Dynamically learns and discovers new capabilities by connecting to external MCP servers on demand.
 
 GUIDELINES:
+- When asked for the cheapest dates or best trip window across a month, actively scan the month and suggest the best dates!
 - When friends are discussing plans, analyze preceding messages to extract constraints (e.g. Alice is vegan, Bob has a $100 budget).
 - When an image is shared, consult 'vision_specialist' to evaluate the venue.
 - When money is mentioned or someone says 'I paid $X for dinner', consult 'expense_specialist'.
@@ -58,12 +81,26 @@ def create_ambient_companion():
     mcp_travel_tools = mcp_manager.get_tools_for_server("travel")
     active_travel_tools = mcp_travel_tools if mcp_travel_tools else travel_tools
 
+    now_sgt = datetime.now(timezone(timedelta(hours=8)))
+    today_str = now_sgt.strftime("%A, %d %B %Y")
+    next_month_str = (now_sgt.replace(day=1) + timedelta(days=32)).strftime("%B %Y")
+
     # Subagent definitions conforming to DeepAgents custom subagent specification
     subagents_config = [
         {
             "name": "travel_specialist",
-            "description": "Searches flights, accommodations, and generates day-by-day itineraries using the Travel MCP server.",
-            "system_prompt": "You are an expert travel planner powered by MCP. Search flights and hotels, and balance group constraints.",
+            "description": "Searches flights and accommodations, scans entire months to find the cheapest travel dates, and generates day-by-day itineraries using the Travel MCP server.",
+            "system_prompt": (
+                f"You are an expert travel planner powered by MCP tools.\n"
+                f"## CALENDAR CONTEXT (DO NOT HALLUCINATE):\n"
+                f"- Today's date is: {today_str} (Year {now_sgt.year}).\n"
+                f"- 'Next month' is: {next_month_str}.\n"
+                f"- NEVER use 2025 or any past dates.\n\n"
+                f"## TOOLS AND USAGE RULES:\n"
+                f"1. **`search_cheapest_flights_in_month`**: Use this whenever the user asks to find the cheapest dates, asks to suggest dates, or wants the cheapest N-day trip in a month (e.g., 'cheapest 5-day trip in {next_month_str}'). DO NOT refuse or ask them to pick dates—scan the month, find the lowest fares, and recommend the best dates!\n"
+                f"2. **`search_flights`**: Use this when the user has provided specific travel dates (e.g., '2026-10-15 to 2026-10-20').\n"
+                f"3. **Origin & Destination**: If departure city (e.g. Singapore vs Bangalore) is ambiguous in context, confirm the city or default to the primary mentioned origin."
+            ),
             "tools": active_travel_tools,
             "skills": ["./skills/travel-skills/"],
         },
@@ -84,7 +121,7 @@ def create_ambient_companion():
         {
             "name": "proactive_concierge",
             "description": "Schedules and handles trip-day wake-ups, departure confirmation polls, and daily check-ins.",
-            "system_prompt": "You are a proactive trip coordinator. Check in on trip morning and track journey progress.",
+            "system_prompt": f"You are a proactive trip coordinator. Today is {today_str}. Check in on trip morning and track journey progress.",
             "tools": proactive_tools,
             "skills": ["./skills/concierge-skills/"],
         },
@@ -101,7 +138,7 @@ def create_ambient_companion():
     from deepagents import create_deep_agent
     graph = create_deep_agent(
         model=llm,
-        system_prompt=SUPERVISOR_SYSTEM_PROMPT,
+        system_prompt=_build_supervisor_system_prompt(),
         tools=[],
         subagents=subagents_config,
         skills=global_skills,
@@ -127,7 +164,22 @@ class DeepAgentCompanion:
         media = data.get("media")
         history = data.get("history", [])
 
+        now_sgt = datetime.now(timezone(timedelta(hours=8)))
+        today_str = now_sgt.strftime("%A, %d %B %Y")
+        next_month_str = (now_sgt.replace(day=1) + timedelta(days=32)).strftime("%B %Y")
+        next_month_start = (now_sgt.replace(day=1) + timedelta(days=32)).replace(day=1).strftime("%Y-%m-%d")
+
         parts = []
+        # Always inject the real date at the top of each message so the LLM cannot hallucinate it
+        parts.append(
+            f"[CALENDAR CONTEXT] Today is {today_str} (SGT, Year {now_sgt.year}). "
+            f"'Next month' refers broadly to {next_month_str}.\n"
+            f"[TRAVEL RULES]:\n"
+            f"- If the user asks to find the cheapest dates, suggest dates, or find the best 5-day trip in a month: "
+            f"DO NOT REFUSE! Consult 'travel_specialist' to scan the month across Google Flights, discover the cheapest dates, and recommend them.\n"
+            f"- If the user specifies travel plans without dates and did NOT ask to find the cheapest, ask for clarification."
+        )
+
         if history:
             history_lines = "\n".join(
                 f"  {m.get('sender_name', 'User')}: {m.get('text', '')}"

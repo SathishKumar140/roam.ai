@@ -3,6 +3,12 @@ from typing import Optional
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except Exception:
+    pass
+
 # Load environment variables
 load_dotenv()
 
@@ -17,7 +23,7 @@ class Settings(BaseModel):
     
     # Gemini
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
     # OpenAI
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
@@ -79,6 +85,6 @@ def get_llm(provider: Optional[str] = None):
     # Fallback to standard chat interface or dummy mock for local testing
     try:
         from langchain_community.chat_models import FakeListChatModel
-        return FakeListChatModel(responses=["Hello! I am your ambient group concierge."])
+        return FakeListChatModel(responses=["Hello! I am your buddy to plan and assist you in travel and stay or outing."])
     except Exception:
         return None

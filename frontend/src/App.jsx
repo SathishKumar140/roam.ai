@@ -22,10 +22,10 @@ export default function App() {
   const [messages, setMessages] = useState([
     {
       id: 'welcome',
-      sender: 'RoamAI Ambient Concierge',
+      sender: 'RoamAI',
       isRoamAI: true,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      text: "Hey group! 🌍 I'm your ambient concierge. I passively listen in this group chat and step in whenever summoned, or when you need travel booking, itineraries, or expense debt simplification.\n\nTry sending a message or click any prompt below!",
+      text: "Hey group! 🌍 I'm your roam concierge. I passively listen in this group chat and step in whenever summoned, or when you need travel booking, itineraries, or expense debt simplification.\n\nTry sending a message or click any prompt below!",
       buttons: []
     }
   ])
@@ -79,7 +79,7 @@ export default function App() {
       if (data && data.output) {
         const aiMsg = {
           id: `ai_${Date.now()}`,
-          sender: 'RoamAI Ambient Concierge',
+          sender: 'RoamAI',
           isRoamAI: true,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           text: data.output,
@@ -119,7 +119,7 @@ export default function App() {
         <div className="brand-section">
           <div className="brand-icon">🌍</div>
           <div>
-            <div className="brand-name">RoamAI Group Concierge</div>
+            <div className="brand-name">RoamAI</div>
           </div>
           <span className="brand-tag">React + Vite</span>
         </div>
