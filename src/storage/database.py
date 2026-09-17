@@ -52,7 +52,7 @@ class DatabaseManager:
                 );
             """)
 
-            # 3. Trip Expenses
+            # 3. Trip Expenses with Consent Tracking
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS trip_expenses (
                     expense_id TEXT PRIMARY KEY,
@@ -60,10 +60,37 @@ class DatabaseManager:
                     paid_by_user_id TEXT NOT NULL,
                     paid_by_name TEXT NOT NULL,
                     amount REAL NOT NULL,
-                    currency TEXT DEFAULT 'USD',
+                    currency TEXT DEFAULT 'SGD',
                     description TEXT NOT NULL,
                     split_between_json TEXT NOT NULL,
+                    confirmed_json TEXT NOT NULL DEFAULT '[]',
+                    status TEXT NOT NULL DEFAULT 'pending_confirmation',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+
+            # Safe column additions if table already existed
+            try:
+                conn.execute("ALTER TABLE trip_expenses ADD COLUMN confirmed_json TEXT NOT NULL DEFAULT '[]';")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE trip_expenses ADD COLUMN status TEXT NOT NULL DEFAULT 'pending_confirmation';")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE group_messages ADD COLUMN media_json TEXT;")
+            except Exception:
+                pass
+
+            # 4. Long-term User Memory & Preferences
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS user_memory (
+                    user_id TEXT NOT NULL,
+                    key TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (user_id, key)
                 );
             """)
             conn.commit()
@@ -150,8 +177,8 @@ class DatabaseManager:
     def add_expense(self, session_id: str, expense: ExpenseItem):
         with self._get_connection() as conn:
             conn.execute("""
-                INSERT INTO trip_expenses (expense_id, session_id, paid_by_user_id, paid_by_name, amount, currency, description, split_between_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO trip_expenses (expense_id, session_id, paid_by_user_id, paid_by_name, amount, currency, description, split_between_json, confirmed_json, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 expense.expense_id,
                 session_id,
@@ -160,7 +187,9 @@ class DatabaseManager:
                 expense.amount,
                 expense.currency,
                 expense.description,
-                json.dumps(expense.split_between_user_ids)
+                json.dumps(expense.split_between_user_ids),
+                json.dumps(expense.confirmed_by_user_ids),
+                expense.status
             ))
             conn.commit()
 
@@ -168,17 +197,95 @@ class DatabaseManager:
         with self._get_connection() as conn:
             cursor = conn.execute("SELECT * FROM trip_expenses WHERE session_id = ? ORDER BY created_at ASC", (session_id,))
             rows = cursor.fetchall()
-            return [
-                ExpenseItem(
-                    expense_id=r["expense_id"],
-                    paid_by_user_id=r["paid_by_user_id"],
-                    paid_by_name=r["paid_by_name"],
-                    amount=r["amount"],
-                    currency=r["currency"],
-                    description=r["description"],
-                    split_between_user_ids=json.loads(r["split_between_json"])
+            expenses = []
+            for r in rows:
+                keys = r.keys()
+                confirmed = json.loads(r["confirmed_json"]) if "confirmed_json" in keys and r["confirmed_json"] else []
+                status = r["status"] if "status" in keys and r["status"] else "pending_confirmation"
+                expenses.append(
+                    ExpenseItem(
+                        expense_id=r["expense_id"],
+                        paid_by_user_id=r["paid_by_user_id"],
+                        paid_by_name=r["paid_by_name"],
+                        amount=r["amount"],
+                        currency=r["currency"] or "SGD",
+                        description=r["description"],
+                        split_between_user_ids=json.loads(r["split_between_json"]),
+                        confirmed_by_user_ids=confirmed,
+                        status=status
+                    )
                 )
-                for r in rows
-            ]
+            return expenses
+
+    def confirm_expense_participant(self, session_id: str, participant_name_or_id: str, expense_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Registers participant consent/confirmation for an expense.
+        Marks them as confirmed. If all split participants confirmed, marks status='confirmed'.
+        Returns list of updated expense summaries.
+        """
+        p_clean = participant_name_or_id.strip().lower()
+        updated = []
+        with self._get_connection() as conn:
+            if expense_id:
+                cursor = conn.execute("SELECT * FROM trip_expenses WHERE session_id = ? AND expense_id = ?", (session_id, expense_id))
+            else:
+                cursor = conn.execute("SELECT * FROM trip_expenses WHERE session_id = ? AND status = 'pending_confirmation' ORDER BY created_at DESC", (session_id,))
+            rows = cursor.fetchall()
+
+            for r in rows:
+                keys = r.keys()
+                split_members = json.loads(r["split_between_json"])
+                confirmed = json.loads(r["confirmed_json"]) if "confirmed_json" in keys and r["confirmed_json"] else []
+
+                # Payer is always considered confirmed
+                payer_name = r["paid_by_name"]
+                if payer_name not in confirmed:
+                    confirmed.append(payer_name)
+
+                # Match participant
+                matched_name = next((m for m in split_members if m.lower() == p_clean or p_clean in m.lower()), participant_name_or_id.strip())
+                if matched_name not in confirmed:
+                    confirmed.append(matched_name)
+
+                # Check if all split members confirmed
+                all_confirmed = all(any(c.lower() == m.lower() or m.lower() in c.lower() for c in confirmed) for m in split_members)
+                new_status = "confirmed" if all_confirmed else "pending_confirmation"
+
+                conn.execute("""
+                    UPDATE trip_expenses 
+                    SET confirmed_json = ?, status = ?
+                    WHERE expense_id = ?
+                """, (json.dumps(confirmed), new_status, r["expense_id"]))
+
+                pending_names = [m for m in split_members if not any(c.lower() == m.lower() or m.lower() in c.lower() for c in confirmed)]
+                updated.append({
+                    "expense_id": r["expense_id"],
+                    "description": r["description"],
+                    "amount": r["amount"],
+                    "currency": r["currency"] or "SGD",
+                    "confirmed_by": confirmed,
+                    "pending_for": pending_names,
+                    "status": new_status
+                })
+            conn.commit()
+        return updated
+
+    def set_user_memory(self, user_id: str, key: str, value: str):
+        """Persists a key-value user preference or attribute (e.g. home_city, origin_airport)."""
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO user_memory (user_id, key, value, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(user_id, key) DO UPDATE SET
+                    value=excluded.value,
+                    updated_at=CURRENT_TIMESTAMP
+            """, (user_id, key, value))
+            conn.commit()
+
+    def get_user_memories(self, user_id: str) -> Dict[str, str]:
+        """Retrieves all stored long-term preferences/attributes for a given user."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT key, value FROM user_memory WHERE user_id = ?", (user_id,))
+            return {row["key"]: row["value"] for row in cursor.fetchall()}
 
 db = DatabaseManager()

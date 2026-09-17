@@ -181,4 +181,19 @@ def convert_currency(from_currency: str, to_currency: str, amount: float = 1.0) 
         logger.error(f"❌ convert_currency failed: {e}")
         return json.dumps({"error": str(e), "from_currency": from_currency, "to_currency": to_currency})
 
-travel_tools = [search_flights, search_hotels, generate_itinerary, search_web, convert_currency]
+@tool
+def save_user_memory(user_id: str, key: str, value: str) -> str:
+    """
+    Saves a persistent preference or attribute for a user (e.g. key='home_city', value='Chennai', key='origin_city', value='Singapore', key='diet', value='vegetarian').
+    Use this when a user explicitly reveals where they live, where home is, or their travel preferences.
+    """
+    logger.info(f"💾 [Live Tool Call] save_user_memory(user_id={user_id}, key={key}, value={value})")
+    try:
+        from src.storage.database import db
+        db.set_user_memory(user_id, key, value)
+        return json.dumps({"status": "saved", "user_id": user_id, "key": key, "value": value})
+    except Exception as e:
+        logger.error(f"❌ save_user_memory failed: {e}")
+        return json.dumps({"status": "error", "error": str(e)})
+
+travel_tools = [search_flights, search_hotels, generate_itinerary, search_web, convert_currency, save_user_memory]

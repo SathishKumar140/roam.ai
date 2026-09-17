@@ -16,6 +16,21 @@ class TelegramAdapter(ChannelAdapter):
     def platform(self) -> PlatformType:
         return "telegram"
 
+    async def get_file_url(self, file_id: str) -> Optional[str]:
+        """Resolves a Telegram file_id into a full downloadable CDN URL."""
+        if not self.base_url:
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{self.base_url}/getFile", params={"file_id": file_id})
+                if resp.status_code == 200:
+                    file_path = resp.json().get("result", {}).get("file_path")
+                    if file_path:
+                        return f"https://api.telegram.org/file/bot{self.bot_token}/{file_path}"
+        except Exception as e:
+            logger.warning(f"⚠️ [Telegram] Failed to get file URL for {file_id}: {e}")
+        return None
+
     async def parse_webhook(self, payload: Dict[str, Any]) -> Optional[ChannelEvent]:
         """Normalizes Telegram Update JSON into unified ChannelEvent."""
         msg = payload.get("message") or payload.get("channel_post")
@@ -53,9 +68,12 @@ class TelegramAdapter(ChannelAdapter):
         if "photo" in msg and len(msg["photo"]) > 0:
             # Pick highest resolution photo
             highest_res = msg["photo"][-1]
+            file_id = highest_res.get("file_id")
+            file_url = await self.get_file_url(file_id) if file_id else None
             media = ChannelMedia(
                 type="photo",
-                file_id=highest_res.get("file_id")
+                file_id=file_id,
+                url=file_url
             )
         elif "location" in msg:
             loc = msg["location"]

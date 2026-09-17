@@ -3,7 +3,7 @@ import sys
 import unittest
 
 # Import test functions
-from tests.test_debt_simplification import test_simple_three_way_split, test_transitive_debt_simplification
+from tests.test_debt_simplification import test_simple_three_way_split, test_transitive_debt_simplification, test_consent_based_expense_confirmation
 from tests.test_subagents import test_travel_tools_execution, test_vision_tools_execution, test_proactive_concierge_lifecycle
 from tests.test_normalization import (
     test_telegram_message_normalization,
@@ -41,6 +41,9 @@ def run_sync_tests():
 
     test_transitive_debt_simplification()
     print("  ✅ test_transitive_debt_simplification passed")
+
+    test_consent_based_expense_confirmation()
+    print("  ✅ test_consent_based_expense_confirmation passed")
 
     test_travel_tools_execution()
     print("  ✅ test_travel_tools_execution passed")
@@ -118,7 +121,7 @@ if __name__ == "__main__":
     try:
         run_sync_tests()
         asyncio.run(run_async_tests())
-        print("\n🎉 ALL 27 TESTS PASSED SUCCESSFULLY (UNIT, MCP ECOSYSTEM, DEEPAGENTS SKILLS SPEC & PROGRESSIVE DISCLOSURE)!")
+        print("\n🎉 ALL 28 TESTS PASSED SUCCESSFULLY (UNIT, MCP ECOSYSTEM, DEEPAGENTS SKILLS SPEC & PROGRESSIVE DISCLOSURE)!")
         sys.exit(0)
     except Exception as e:
         print(f"\n❌ Test failed: {e}")

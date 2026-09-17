@@ -21,6 +21,7 @@ from src.models.channel import ChannelEvent, OutboundMessage, InteractiveButton
 # Import specialized toolsets & MCP Client
 from src.mcp.client import mcp_manager
 from src.skills.loader import SkillsLoader
+from src.adapters.channel_formatter import get_channel_presentation_prompt, build_channel_buttons
 from src.agents.tools.travel_tools import travel_tools
 from src.agents.tools.vision_tools import vision_tools
 from src.agents.tools.expense_tools import expense_tools
@@ -42,13 +43,18 @@ You operate on an open Model Context Protocol (MCP) architecture and possess dee
 - ALWAYS use the real current year {now_utc.year} in any date reasoning. NEVER use 2025 or any past year.
 
 ## HANDLING TRAVEL REQUESTS & DATE REASONING:
-1. **WHEN ASKED TO PLAN A TRIP (e.g. "let's plan a trip to Bali!")**:
-   - Immediately consult 'travel_specialist' to synthesize a comprehensive 'Trip Proposal' with 'Recommended Flight' and 'Recommended Stay' tailored to constraints in chat history.
-2. **WHEN ASKED TO FIND CHEAPEST / SUGGEST DATES** (e.g. "find the cheapest and suggest the dates", "cheapest 5 days next month", "when is it cheapest to fly?"):
-   - **DO NOT REFUSE!** NEVER say "As an AI, I cannot choose dates for you".
-   - Consult 'travel_specialist' to scan the month across Google Flights using `search_cheapest_flights_in_month`.
-   - Proactively recommend the cheapest travel window found, show price comparisons across the month, and present the best flight options!
-3. **WHEN DATES & ROUTE ARE SPECIFIC** (e.g. "Fly Oct 15 to Oct 22"):
+1. **DESTINATION VALIDATION & CLARIFICATION (CRITICAL ANTI-HALLUCINATION)**:
+   - A trip proposal or flight search CAN ONLY be conducted if a specific destination (city, country, or region) is clearly identified from the user's message, recent chat history, or stored user memory.
+   - **NEVER HALLUCINATE OR DEFAULT TO A RANDOM DESTINATION (e.g. NEVER guess Bali, Vietnam, or anywhere else)** when the user says something ambiguous like "go to my home", "visit home", "plan a trip", "plan my vacation", or "somewhere nice" without specifying where home or the destination actually is!
+   - If the destination or home city is UNKNOWN or NOT specified:
+     **DO NOT GUESS! STOP AND ASK FOR CLARIFICATION IMMEDIATELY!**
+     Politely ask: "Where is home for you (which city or airport)? And will you be departing from Singapore (SIN) or elsewhere? Once you share that, I'll find the best flights and plan it right away!"
+2. **WHEN A SPECIFIC DESTINATION IS PROVIDED (e.g. "let's plan a trip to Bali!", "trip to Tokyo", "flying to London")**:
+   - Consult 'travel_specialist' to synthesize a comprehensive 'Trip Proposal' with 'Recommended Flight' and 'Recommended Stay' tailored to constraints in chat history.
+3. **WHEN ASKED TO FIND CHEAPEST / SUGGEST DATES** (e.g. "find the cheapest and suggest the dates", "cheapest 5 days next month", "when is it cheapest to fly?"):
+   - If destination is known, consult 'travel_specialist' to scan the month across Google Flights using `search_cheapest_flights_in_month`.
+   - If destination is unknown, ask where they are flying first!
+4. **WHEN DATES & ROUTE ARE SPECIFIC** (e.g. "Fly Oct 15 to Oct 22"):
    - Consult 'travel_specialist' to search live flights for those exact dates.
 
 You have access to 5 specialized sub-agents with dedicated, isolated context windows:
@@ -116,28 +122,35 @@ def create_ambient_companion():
                 f"   - Call `search_web` to research the destination's geography, best stops, and route details.\n"
                 f"   - Call `search_flights` or `search_cheapest_flights_in_month` to find real live flights in SGD (default origin: 'SIN', currency: 'SGD').\n"
                 f"   - Call `search_hotels` to look up real accommodation in the destination (currency: 'SGD').\n"
-                f"   - Call `convert_currency` to get real-time exchange rates.\n"
+                 f"   - Call `convert_currency` to get real-time exchange rates.\n"
                 f"   - Call `generate_itinerary` or compile real route recommendations from live search results.\n"
-                f"4. Format the final response clearly titled '# Trip Proposal' with sections '### Recommended Flight', '### Recommended Stay', and '### Currency Details & Estimated Local Expenses'. Explicitly label flight price as SGD (e.g. 'SGD 171 (One-way)' or 'SGD 287 (Round-trip)')."
+                f"4. Format the final response clearly titled '# Trip Proposal' with sections '### Recommended Flight', '### Recommended Stay', and '### Currency Details & Estimated Local Expenses'. For Telegram/chat channels, format details using clean Visual Card style with tree connectors ('├ ', '└ ') and explicitly label all flight prices as SGD (e.g. 'SGD 171 (One-way)' or 'SGD 287 (Round-trip)')."
             ),
             "tools": active_travel_tools,
             "skills": ["./skills/travel-skills/"],
         },
         {
             "name": "vision_specialist",
-            "description": "Analyzes photos sent to the group (venues, menus, flyers, receipts) using multimodal vision.",
-            "system_prompt": "You are a multimodal venue and scout expert. When analyzing photos or places, always structure your response with exact headers '### Scout Analysis', '### Vibe', and '### Pricing'.",
+            "description": "Analyzes photos sent to the group (venues, menus, flyers, receipts) using multimodal GPT-4o vision and live web grounding.",
+            "system_prompt": (
+                "You are an expert location scout and multimodal vision analyst. "
+                "When a photo is provided, IMMEDIATELY call 'analyze_venue_photo' to identify the exact place, landmark, or venue and inspect its visual cues. "
+                "Always structure your response clearly with exact headers '### Scout Analysis', '### Vibe', and '### Pricing'. "
+                "Always quote pricing in SGD (e.g. Free admission, or ~SGD 15 - 25 per meal/person). NEVER output generic static '$$' symbols. "
+                "For Telegram/chat channels, format details using clean Visual Card style with tree connectors ('├ ', '└ ')."
+            ),
             "tools": vision_tools,
             "skills": ["./skills/vision-skills/"],
         },
         {
             "name": "expense_specialist",
-            "description": "Manages the group expense ledger and calculates simplified debt settlement (who owes what).",
+            "description": "Manages the group expense ledger, records participant consent/confirmations, and calculates simplified debt settlement (who owes what).",
             "system_prompt": (
-                "You are an accurate group accountant. "
+                "You are an accurate, fair group accountant. "
                 "When a user reports paying an expense (e.g. 'I paid $120 for dinner'), IMMEDIATELY call 'record_expense'. "
-                "If specific split members are not mentioned, split among all group members or use 'Alice, Bob'. "
+                "In group chats, expenses are logged in pending confirmation until all participants consent. "
                 "Always include 'Logged expense' in your response. "
+                "When a participant confirms or agrees (e.g. 'I\\'m in', 'Confirm', 'Yes agree', 'Count me in', or callback 'confirm_expense_split'), IMMEDIATELY call 'confirm_expense_split'. "
                 "When asked about balance or who owes what (e.g. 'Who owes what right now?'), IMMEDIATELY call 'get_balance_sheet' and output the 'Group Expense Settlement Sheet'."
             ),
             "tools": expense_tools,
@@ -184,6 +197,7 @@ class DeepAgentCompanion:
     def _build_human_message(self, data: Dict[str, Any]) -> HumanMessage:
         """Serialize the event dict into a single context-rich HumanMessage."""
         sender = data.get("sender_name", "User")
+        sender_id = data.get("sender_id", "")
         text = data.get("text", "")
         platform = data.get("platform", "telegram")
         media = data.get("media")
@@ -201,16 +215,27 @@ class DeepAgentCompanion:
             f"'Next month' refers broadly to {next_month_str}.\n"
             f"[CURRENCY RULES]: All flight, hotel, and itinerary prices MUST be quoted and displayed in SGD (Singapore Dollars, e.g. 'SGD 171 (One-way)' or 'SGD 287 (Round-trip)'). "
             f"Always call 'convert_currency' to fetch real-time live exchange rates for destination currency (e.g. 1 SGD to VND/IDR/JPY) and include a '### Currency Details & Estimated Local Expenses' section (local currency name, live rate, estimated costs for meals, motorbike rental, homestays/budget in both local currency and SGD).\n"
-            f"[TRAVEL RULES]:\n"
-            f"- If the user asks about planning a trip, vacation, or mentions a destination (e.g. 'I am planning to vietnam giang loop' or 'plan trip to Bali'): "
-            f"You MUST delegate to 'travel_specialist'. The travel specialist must execute live tools (search_web, search_flights, search_hotels with currency='SGD') to research actual options and generate a verified 'Trip Proposal' with real flights and stays quoted in SGD.\n"
+            f"[TRAVEL RULES - CRITICAL DESTINATION VALIDATION & ANTI-HALLUCINATION]:\n"
+            f"- A trip proposal or flight search CAN ONLY be conducted if a specific destination (city, country, or region) is clearly identified from the user's message, recent chat history, or [USER PERSISTENT MEMORY].\n"
+            f"- IF the user mentions 'go to my home', 'visit home', 'plan a vacation', or 'plan a trip' BUT the destination/home city is NOT specified and NOT found in memory: "
+            f"YOU MUST NOT HALLUCINATE OR GUESS A DESTINATION (NEVER default to Bali or anywhere else)! "
+            f"Instead, politely and warmly ASK FOR CLARIFICATION: Ask where home is for them (which city or airport) and confirm their departure city (e.g. Singapore) so you can accurately plan and search live flights for them!\n"
+            f"- ONLY when a specific destination is identified (e.g. 'plan trip to Bali', 'going to Vietnam', 'Tokyo', 'Chennai', etc.), delegate to 'travel_specialist' to execute live tools (search_web, search_flights, search_hotels with currency='SGD') to research actual options and generate a verified 'Trip Proposal' with real flights and stays quoted in SGD.\n"
+            f"- If the user specifies their home or preferences (e.g. 'My home is Chennai' or 'I live in Singapore'): call save_user_memory and proceed with their trip!\n"
             f"- NEVER output placeholders like '[Insert Departure City]'. If departure city is not stated, assume default origin is Singapore (SIN).\n"
             f"- If the user asks to find the cheapest dates or suggest dates in a month: "
-            f"Consult 'travel_specialist' to scan Google Flights via search_cheapest_flights_in_month with currency='SGD' and recommend the cheapest dates in SGD.\n"
+            f"Consult 'travel_specialist' to scan Google Flights via search_cheapest_flights_in_month with currency='SGD' and recommend the cheapest dates in SGD (if destination is known; if unknown, ask first!).\n"
             f"- If asked about skills, capabilities, or MCP servers: consult 'skill_specialist' using list_connected_mcp_skills.\n"
             f"- If a photo is attached: consult 'vision_specialist' and format response with 'Scout Analysis', 'Vibe', and 'Pricing'.\n"
-            f"- If money, bills, dinner payments, balance, or 'Who owes what' is asked: You MUST delegate to 'expense_specialist' to call 'record_expense' or 'get_balance_sheet' and output the 'Group Expense Settlement Sheet' or 'Logged expense'!"
+            f"- If money, bills, dinner payments, balance, or 'Who owes what' is asked, or if a participant confirms/agrees to an expense (e.g. 'I\\'m in', 'Confirm', 'Yes agree', 'Count me in', or callback 'confirm_expense_split'): You MUST delegate to 'expense_specialist' to call 'record_expense', 'confirm_expense_split', or 'get_balance_sheet' and output the 'Group Expense Settlement Sheet' or 'Logged expense'!"
         )
+
+        # Inject persistent user memories if available
+        if sender_id:
+            user_mem = db.get_user_memories(sender_id)
+            if user_mem:
+                mem_str = ", ".join(f"{k}: {v}" for k, v in user_mem.items())
+                parts.append(f"[USER PERSISTENT MEMORY for {sender} (id={sender_id})]: {mem_str}")
 
         if history:
             history_lines = "\n".join(
@@ -219,10 +244,15 @@ class DeepAgentCompanion:
             )
             parts.append(f"[Recent group chat history]\n{history_lines}")
 
+        # Dynamically inject channel-specific presentation directive
+        parts.append(get_channel_presentation_prompt(platform))
         parts.append(f"[{platform.upper()} | sender={sender}]")
 
         if media:
-            parts.append(f"[Media attached: type={media.get('type')}, id={media.get('file_id', '')}]")
+            file_id = media.get("file_id") or ""
+            file_url = media.get("url") or ""
+            photo_ref = file_url or file_id
+            parts.append(f"[Media attached: type={media.get('type')}, id={file_id}, url={file_url}, photo_ref={photo_ref}]")
 
         parts.append(text)
         return HumanMessage(content="\n".join(parts))
@@ -230,8 +260,14 @@ class DeepAgentCompanion:
     async def ainvoke(self, data: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Invoke the deepagents graph and return a normalised output dict."""
         channel_id = data.get("channel_id", "default")
+        platform = data.get("platform", "telegram")
         text = data.get("text", "")
         logger.info(f"🧠 [DeepAgent] Processing input for channel '{channel_id}': \"{text}\"")
+
+        # Cache media if present so vision tools can access the direct Telegram photo
+        if data.get("media"):
+            from src.agents.tools.vision_tools import set_channel_media
+            set_channel_media(channel_id, data.get("media"))
 
         # Progressive disclosure skill inspection & listing intercept
         text_lower = text.lower()
@@ -346,25 +382,26 @@ class DeepAgentCompanion:
                 if t_name and t_name != "tool" and not any(x.get("name") == t_name for x in executed_tool_calls):
                     executed_tool_calls.append({"name": t_name, "args": {}})
 
-        # Generate action buttons based on interaction type
-        buttons = []
-        lower_output = output_text.lower()
-        if any(w in lower_output for w in ["trip proposal", "recommended flight", "recommended stay", "itinerary"]):
-            buttons = [
-                [InteractiveButton(id="confirm_booking", label="✅ Confirm Proposal", type="callback")],
-                [InteractiveButton(id="modify_plan", label="🔄 Adjust Preferences", type="callback")]
-            ]
-        elif any(w in lower_output for w in ["scout analysis", "venue analysis", "facade", "vibe"]):
-            buttons = [
-                [InteractiveButton(id="maps_view", label="📍 View on Maps", type="callback")]
-            ]
-        elif any(w in lower_output for w in ["wake-up", "departure poll", "are you ready", "confirm departure"]):
-            buttons = [
-                [InteractiveButton(id="vote_yes", label="👍 Ready & On My Way!", type="callback")],
-                [InteractiveButton(id="vote_delayed", label="⏰ Running Late", type="callback")]
-            ]
+        # Generate channel-adaptive action buttons based on interaction type and tools executed
+        buttons = build_channel_buttons(platform, output_text, executed_tool_calls)
+        if not buttons:
+            lower_output = output_text.lower()
+            if any(w in lower_output for w in ["trip proposal", "recommended flight", "recommended stay", "itinerary"]):
+                buttons = [
+                    [InteractiveButton(id="confirm_booking", label="✅ Confirm Proposal", type="callback")],
+                    [InteractiveButton(id="modify_plan", label="🔄 Adjust Preferences", type="callback")]
+                ]
+            elif any(w in lower_output for w in ["scout analysis", "venue analysis", "facade", "vibe"]):
+                buttons = [
+                    [InteractiveButton(id="maps_view", label="📍 View on Maps", type="callback")]
+                ]
+            elif any(w in lower_output for w in ["wake-up", "departure poll", "are you ready", "confirm departure"]):
+                buttons = [
+                    [InteractiveButton(id="vote_yes", label="👍 Ready & On My Way!", type="callback")],
+                    [InteractiveButton(id="vote_delayed", label="⏰ Running Late", type="callback")]
+                ]
 
-        logger.info(f"✅ [DeepAgent] Graph executed successfully ({len(executed_tool_calls)} tool calls recorded). Response preview: {output_text[:80]}...")
+        logger.info(f"✅ [DeepAgent] Graph executed successfully ({len(executed_tool_calls)} tool calls recorded, {len(buttons)} button rows). Response preview: {output_text[:80]}...")
         return {"output": output_text, "buttons": buttons, "tool_calls": executed_tool_calls}
 
 

@@ -19,9 +19,11 @@ class ExpenseItem(BaseModel):
     paid_by_user_id: str
     paid_by_name: str
     amount: float
-    currency: str = "USD"
+    currency: str = "SGD"
     description: str
     split_between_user_ids: List[str] = Field(default_factory=list)
+    confirmed_by_user_ids: List[str] = Field(default_factory=list)
+    status: Literal["pending_confirmation", "confirmed"] = "pending_confirmation"
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 class DebtTransfer(BaseModel):
