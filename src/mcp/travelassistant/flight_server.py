@@ -177,7 +177,7 @@ def search_flights_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
     date = ensure_future_date(raw_date, fallback_days_ahead=30)
     ret_date_raw = arguments.get("return_date")
     ret_date = ensure_future_date(ret_date_raw, fallback_days_ahead=37) if ret_date_raw else None
-    currency = arguments.get("currency", "USD")
+    currency = arguments.get("currency") or "SGD"
     api_key = os.getenv("SERPAPI_KEY")
 
     dep = normalize_airport(dep_raw)
@@ -272,7 +272,7 @@ def search_cheapest_flights_in_month_handler(arguments: Dict[str, Any]) -> Dict[
     arr_raw = arguments.get("arrival_id") or arguments.get("destination") or "TYO"
     month_raw = str(arguments.get("month") or "").lower()
     duration = int(arguments.get("duration_days") or 5)
-    currency = arguments.get("currency", "USD")
+    currency = arguments.get("currency") or "SGD"
     api_key = os.getenv("SERPAPI_KEY")
 
     dep = normalize_airport(dep_raw)
@@ -375,14 +375,14 @@ def search_cheapest_flights_in_month_handler(arguments: Dict[str, Any]) -> Dict[
         summary_windows = [
             {
                 "dates": f"{w['departure_date']} to {w['return_date']}",
-                "lowest_price": f"${w['lowest_price']} {currency}",
+                "lowest_price": f"{currency} {w['lowest_price']}",
                 "airline": w["top_flight"]["airline"] if w.get("top_flight") else "Unknown",
                 "is_cheapest": (w == best_window)
             }
             for w in windows_results
         ]
 
-        sys.stderr.write(f"✅ [Flight MCP] Found cheapest travel window: {best_window['departure_date']} to {best_window['return_date']} at ${best_window['lowest_price']}\n")
+        sys.stderr.write(f"✅ [Flight MCP] Found cheapest travel window: {best_window['departure_date']} to {best_window['return_date']} at {currency} {best_window['lowest_price']}\n")
         sys.stderr.flush()
 
         return {

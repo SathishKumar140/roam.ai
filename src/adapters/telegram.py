@@ -1,8 +1,11 @@
+import logging
 import httpx
 from typing import Optional, Dict, Any, List
 from src.config import settings
 from src.adapters.base import ChannelAdapter
 from src.models.channel import ChannelEvent, ChannelUser, ChannelMedia, OutboundMessage, PlatformType
+
+logger = logging.getLogger("roam.telegram")
 
 class TelegramAdapter(ChannelAdapter):
     def __init__(self, bot_token: Optional[str] = None):
@@ -100,34 +103,61 @@ class TelegramAdapter(ChannelAdapter):
                 inline_keyboard.append(btn_row)
             reply_markup = {"inline_keyboard": inline_keyboard}
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             if message.media_url:
+                caption = message.text or ""
+                # Telegram photo caption limit is 1024 chars
+                if len(caption) > 1024:
+                    caption = caption[:1020] + "..."
                 payload = {
                     "chat_id": message.channel_id,
                     "photo": message.media_url,
-                    "caption": message.text,
+                    "caption": caption,
                     "parse_mode": "Markdown"
                 }
                 if reply_markup:
                     payload["reply_markup"] = reply_markup
                 resp = await client.post(f"{self.base_url}/sendPhoto", json=payload)
+                if resp.status_code != 200:
+                    logger.warning(f"⚠️ [Telegram] sendPhoto failed ({resp.status_code}): {resp.text}. Retrying without parse_mode...")
+                    payload.pop("parse_mode", None)
+                    resp = await client.post(f"{self.base_url}/sendPhoto", json=payload)
                 return resp.status_code == 200
             else:
-                payload = {
-                    "chat_id": message.channel_id,
-                    "text": message.text,
-                    "parse_mode": "Markdown"
-                }
-                if reply_markup:
-                    payload["reply_markup"] = reply_markup
-                resp = await client.post(f"{self.base_url}/sendMessage", json=payload)
-                return resp.status_code == 200
+                full_text = message.text or ""
+                # Telegram message text limit is 4096 chars; chunk if necessary
+                chunk_size = 4000
+                chunks = [full_text[i:i + chunk_size] for i in range(0, max(1, len(full_text)), chunk_size)]
+                
+                success = True
+                for idx, chunk in enumerate(chunks):
+                    payload = {
+                        "chat_id": message.channel_id,
+                        "text": chunk,
+                        "parse_mode": "Markdown"
+                    }
+                    # Attach buttons only to the final chunk
+                    if idx == len(chunks) - 1 and reply_markup:
+                        payload["reply_markup"] = reply_markup
+
+                    resp = await client.post(f"{self.base_url}/sendMessage", json=payload)
+                    if resp.status_code != 200:
+                        logger.warning(f"⚠️ [Telegram] sendMessage failed ({resp.status_code}): {resp.text}. Retrying without parse_mode...")
+                        payload.pop("parse_mode", None)
+                        resp = await client.post(f"{self.base_url}/sendMessage", json=payload)
+                    if resp.status_code != 200:
+                        logger.error(f"❌ [Telegram] sendMessage retry also failed ({resp.status_code}): {resp.text}")
+                        success = False
+                return success
 
     async def send_typing(self, channel_id: str):
         if not self.base_url:
             return
         async with httpx.AsyncClient(timeout=5.0) as client:
-            await client.post(f"{self.base_url}/sendChatAction", json={
-                "chat_id": channel_id,
-                "action": "typing"
-            })
+            try:
+                await client.post(f"{self.base_url}/sendChatAction", json={
+                    "chat_id": channel_id,
+                    "action": "typing"
+                })
+            except Exception as e:
+                logger.warning(f"⚠️ [Telegram] Failed to send typing indicator: {e}")

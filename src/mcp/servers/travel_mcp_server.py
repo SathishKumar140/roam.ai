@@ -66,7 +66,8 @@ def handle_tool_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
             res = search_flights_handler({
                 "departure_id": origin,
                 "arrival_id": dest,
-                "outbound_date": date
+                "outbound_date": date,
+                "currency": arguments.get("currency") or "SGD"
             })
             res["source"] = "Travel-MCP-Server"
             if "flights" not in res or not res["flights"]:
@@ -91,7 +92,8 @@ def handle_tool_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
             res = search_hotels_handler({
                 "location": dest,
                 "check_in_date": checkin,
-                "check_out_date": checkout
+                "check_out_date": checkout,
+                "currency": arguments.get("currency") or "SGD"
             })
             return {"content": [{"type": "text", "text": json.dumps(res, indent=2)}]}
         except Exception as e:

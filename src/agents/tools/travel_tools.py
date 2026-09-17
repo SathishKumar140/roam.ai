@@ -17,7 +17,8 @@ def search_flights(origin: str, destination: str, date: str, max_budget: Optiona
         res = search_flights_handler({
             "departure_id": origin,
             "arrival_id": destination,
-            "outbound_date": date
+            "outbound_date": date,
+            "currency": "SGD"
         })
         flights = res.get("flights") or res.get("best_flights") or []
         if max_budget and flights:
@@ -76,7 +77,8 @@ def search_hotels(destination: str, checkin_date: str, checkout_date: str, max_p
         res = search_hotels_handler({
             "location": destination,
             "check_in_date": checkin_date,
-            "check_out_date": checkout_date
+            "check_out_date": checkout_date,
+            "currency": "SGD"
         })
         props = res.get("properties", [])
         if not props:
@@ -160,4 +162,23 @@ def search_web(query: str) -> str:
         logger.error(f"❌ search_web failed: {e}")
         return json.dumps([{"error": f"Live web search failed: {e}"}])
 
-travel_tools = [search_flights, search_hotels, generate_itinerary, search_web]
+@tool
+def convert_currency(from_currency: str, to_currency: str, amount: float = 1.0) -> str:
+    """
+    Converts currency amounts using real-time live exchange rate lookups (e.g. from SGD to VND, USD, JPY, EUR, etc.).
+    Returns real live conversion rate, converted amount, and exchange rate info.
+    """
+    logger.info(f"💱 [Live Tool Call] convert_currency(from={from_currency}, to={to_currency}, amount={amount})")
+    try:
+        from src.mcp.travelassistant.finance_server import convert_currency_handler
+        res = convert_currency_handler({
+            "from_currency": from_currency,
+            "to_currency": to_currency,
+            "amount": amount
+        })
+        return json.dumps(res, indent=2)
+    except Exception as e:
+        logger.error(f"❌ convert_currency failed: {e}")
+        return json.dumps({"error": str(e), "from_currency": from_currency, "to_currency": to_currency})
+
+travel_tools = [search_flights, search_hotels, generate_itinerary, search_web, convert_currency]

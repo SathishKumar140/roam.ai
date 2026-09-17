@@ -64,7 +64,7 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
     loc = arguments.get("location", "")
     in_date = ensure_future_date(arguments.get("check_in_date", ""), fallback_days_ahead=30)
     out_date = ensure_future_date(arguments.get("check_out_date", ""), fallback_days_ahead=35)
-    currency = arguments.get("currency", "USD")
+    currency = arguments.get("currency") or "SGD"
     api_key = os.getenv("SERPAPI_KEY")
 
     if api_key:
