@@ -40,21 +40,27 @@ You operate on an open Model Context Protocol (MCP) architecture and possess dee
 ## CURRENT CALENDAR CONTEXT:
 - Today is: {today_str} (Year {now_utc.year}, SGT UTC+8)
 - "Next month" means: {next_month_str}
+- "End of November" means: late November {now_utc.year} (approx 20 to 30 November {now_utc.year}).
 - ALWAYS use the real current year {now_utc.year} in any date reasoning. NEVER use 2025 or any past year.
 
 ## HANDLING TRAVEL REQUESTS & DATE REASONING:
-1. **DESTINATION VALIDATION & CLARIFICATION (CRITICAL ANTI-HALLUCINATION)**:
+1. **EXPLICIT TIMEFRAME PRECEDENCE (CRITICAL)**:
+   - If the user specifies an explicit month or time period (e.g. "November", "end of November", "December", "January"):
+     YOU MUST search flights and hotels for THAT EXACT REQUESTED MONTH (e.g. November {now_utc.year})!
+   - NEVER default to October or "next month" when the user explicitly asked for November or any other month!
+   - If previous messages in chat history were discussing a previous month (e.g. October), the user's latest request (e.g. "end of November") OVERRIDES all previous dates!
+2. **DESTINATION VALIDATION & CLARIFICATION (CRITICAL ANTI-HALLUCINATION)**:
    - A trip proposal or flight search CAN ONLY be conducted if a specific destination (city, country, or region) is clearly identified from the user's message, recent chat history, or stored user memory.
    - **NEVER HALLUCINATE OR DEFAULT TO A RANDOM DESTINATION (e.g. NEVER guess Bali, Vietnam, or anywhere else)** when the user says something ambiguous like "go to my home", "visit home", "plan a trip", "plan my vacation", or "somewhere nice" without specifying where home or the destination actually is!
    - If the destination or home city is UNKNOWN or NOT specified:
      **DO NOT GUESS! STOP AND ASK FOR CLARIFICATION IMMEDIATELY!**
      Politely ask: "Where is home for you (which city or airport)? And will you be departing from Singapore (SIN) or elsewhere? Once you share that, I'll find the best flights and plan it right away!"
-2. **WHEN A SPECIFIC DESTINATION IS PROVIDED (e.g. "let's plan a trip to Bali!", "trip to Tokyo", "flying to London")**:
+3. **WHEN A SPECIFIC DESTINATION IS PROVIDED (e.g. "let's plan a trip to Bali!", "trip to Tokyo", "flying to London")**:
    - Consult 'travel_specialist' to synthesize a comprehensive 'Trip Proposal' with 'Recommended Flight' and 'Recommended Stay' tailored to constraints in chat history.
-3. **WHEN ASKED TO FIND CHEAPEST / SUGGEST DATES** (e.g. "find the cheapest and suggest the dates", "cheapest 5 days next month", "when is it cheapest to fly?"):
-   - If destination is known, consult 'travel_specialist' to scan the month across Google Flights using `search_cheapest_flights_in_month`.
+4. **WHEN ASKED TO FIND CHEAPEST / SUGGEST DATES** (e.g. "find the cheapest and suggest the dates", "cheapest 5 days next month", "end of November"):
+   - If destination is known, consult 'travel_specialist' to scan the target month across Google Flights using `search_cheapest_flights_in_month` (e.g. month='{now_utc.year}-11' for November).
    - If destination is unknown, ask where they are flying first!
-4. **WHEN DATES & ROUTE ARE SPECIFIC** (e.g. "Fly Oct 15 to Oct 22"):
+5. **WHEN DATES & ROUTE ARE SPECIFIC** (e.g. "Fly Nov 25 to Nov 30"):
    - Consult 'travel_specialist' to search live flights for those exact dates.
 
 You have access to 5 specialized sub-agents with dedicated, isolated context windows:
@@ -103,8 +109,12 @@ def create_ambient_companion():
             "description": "Searches live flights via Google Flights, discovers hotels, scans entire months to find cheapest dates, and researches real travel destinations and itineraries.",
             "system_prompt": (
                 f"You are an expert travel planner powered by REAL-TIME LIVE tools.\n"
-                f"## CALENDAR CONTEXT:\n"
+                f"## CALENDAR CONTEXT & TARGET DATES:\n"
                 f"- Today's date is: {today_str} (Year {now_sgt.year}).\n"
+                f"- If user specifies an explicit month (e.g. 'November', 'end of November', 'December'):\n"
+                f"  - You MUST search for THAT EXACT MONTH (e.g. month='{now_sgt.year}-11' or outbound_date='{now_sgt.year}-11-25')!\n"
+                f"  - 'End of November' means late November (e.g. 20-30 Nov {now_sgt.year}).\n"
+                f"  - NEVER substitute October or previous chat history dates if the user requested November or another month.\n"
                 f"- 'Next month' is: {next_month_str}.\n"
                 f"- NEVER use 2025 or any past dates.\n\n"
                 f"## CURRENCY & LOCAL BUDGET RULES:\n"
@@ -212,7 +222,9 @@ class DeepAgentCompanion:
         # Always inject the real date at the top of each message so the LLM cannot hallucinate it
         parts.append(
             f"[CALENDAR CONTEXT] Today is {today_str} (SGT, Year {now_sgt.year}). "
-            f"'Next month' refers broadly to {next_month_str}.\n"
+            f"'Next month' refers to {next_month_str}. "
+            f"'End of November' refers to late November {now_sgt.year} (~20-30 Nov {now_sgt.year}). "
+            f"If the user specifies an explicit month (e.g. November, December), ALWAYS use that exact requested month! Do NOT default to October or reuse older chat history dates.\n"
             f"[CURRENCY RULES]: All flight, hotel, and itinerary prices MUST be quoted and displayed in SGD (Singapore Dollars, e.g. 'SGD 171 (One-way)' or 'SGD 287 (Round-trip)'). "
             f"Always call 'convert_currency' to fetch real-time live exchange rates for destination currency (e.g. 1 SGD to VND/IDR/JPY) and include a '### Currency Details & Estimated Local Expenses' section (local currency name, live rate, estimated costs for meals, motorbike rental, homestays/budget in both local currency and SGD).\n"
             f"[TRAVEL RULES - CRITICAL DESTINATION VALIDATION & ANTI-HALLUCINATION]:\n"
@@ -251,8 +263,12 @@ class DeepAgentCompanion:
         if media:
             file_id = media.get("file_id") or ""
             file_url = media.get("url") or ""
+            m_type = media.get("type", "")
             photo_ref = file_url or file_id
-            parts.append(f"[Media attached: type={media.get('type')}, id={file_id}, url={file_url}, photo_ref={photo_ref}]")
+            if m_type == "voice":
+                parts.append(f"[Voice note received: transcribed speech=\"{text}\"]")
+            else:
+                parts.append(f"[Media attached: type={m_type}, id={file_id}, url={file_url}, photo_ref={photo_ref}]")
 
         parts.append(text)
         return HumanMessage(content="\n".join(parts))

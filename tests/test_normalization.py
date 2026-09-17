@@ -71,3 +71,39 @@ async def test_whatsapp_message_normalization():
     assert event.sender.name == "Charlie"
     assert event.channel_id == "15551234567"
     assert event.text == "I paid $90 for lunch"
+
+async def test_telegram_voice_normalization():
+    adapter = TelegramAdapter()
+    sample_voice_payload = {
+        "update_id": 1003,
+        "message": {
+            "message_id": 44,
+            "from": {"id": 11223, "first_name": "Dave"},
+            "chat": {"id": -987654, "type": "supergroup"},
+            "voice": {
+                "file_id": "voice_file_abc123",
+                "duration": 4,
+                "mime_type": "audio/ogg"
+            }
+        }
+    }
+
+    event = await adapter.parse_webhook(sample_voice_payload)
+    assert event is not None
+    assert event.media is not None
+    assert event.media.type == "voice"
+    assert event.media.file_id == "voice_file_abc123"
+    assert event.media.mime_type == "audio/ogg"
+    assert event.text is not None
+    assert "[Voice" in event.text or len(event.text) > 0
+
+async def test_audio_transcription_service():
+    import os
+    from src.services.transcription import transcribe_audio_async
+    test_audio = "/Users/sathish-mac/.gemini/antigravity-ide/brain/6aec9ee4-bb45-472f-88c4-5901d8232638/.user_uploaded/uploaded_media_1789663936530.img"
+    if os.path.exists(test_audio):
+        text = await transcribe_audio_async(test_audio, mime_type="audio/webm", filename="test.webm")
+        assert text is not None
+        assert len(text) > 10
+        assert any(w in text.lower() for w in ["place", "venue", "expense", "confirmed", "consent"])
+

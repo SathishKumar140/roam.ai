@@ -63,7 +63,7 @@ class TelegramAdapter(ChannelAdapter):
         sender_data = msg.get("from", {})
         text = msg.get("text") or msg.get("caption") or ""
         
-        # Check for photos
+        # Check for photos, voice notes, audio files, or locations
         media = None
         if "photo" in msg and len(msg["photo"]) > 0:
             # Pick highest resolution photo
@@ -75,6 +75,32 @@ class TelegramAdapter(ChannelAdapter):
                 file_id=file_id,
                 url=file_url
             )
+        elif "voice" in msg or "audio" in msg or "video_note" in msg:
+            audio_obj = msg.get("voice") or msg.get("audio") or msg.get("video_note") or {}
+            file_id = audio_obj.get("file_id")
+            mime_type = audio_obj.get("mime_type") or "audio/ogg"
+            file_url = await self.get_file_url(file_id) if file_id else None
+            media = ChannelMedia(
+                type="voice",
+                file_id=file_id,
+                url=file_url,
+                mime_type=mime_type
+            )
+            # Automatic Speech-to-Text Transcription via Whisper
+            if file_url:
+                try:
+                    from src.services.transcription import transcribe_audio_async
+                    filename = "voice.oga" if ("ogg" in mime_type or "oga" in mime_type) else "audio.mp3"
+                    transcribed = await transcribe_audio_async(file_url, mime_type=mime_type, filename=filename)
+                    if transcribed:
+                        logger.info(f"🎙️ [Telegram Voice Transcribed] -> \"{transcribed}\"")
+                        text = f"{text} {transcribed}".strip() if text else transcribed
+                        # Treat user voice message as an explicit interaction
+                        is_mentioned = True
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed transcribing voice message: {e}")
+            if not text:
+                text = "[Voice message]"
         elif "location" in msg:
             loc = msg["location"]
             media = ChannelMedia(

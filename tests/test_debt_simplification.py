@@ -61,10 +61,11 @@ def test_transitive_debt_simplification():
         assert t["to_name"] == "Alice"
 
 def test_consent_based_expense_confirmation():
+    import uuid
     from src.storage.database import db
     from src.agents.tools.expense_tools import record_expense, confirm_expense_split, get_balance_sheet
 
-    channel = "consent_test_channel_1"
+    channel = f"consent_test_{uuid.uuid4().hex[:8]}"
     # 1. Alice logs expense of $90 split with Bob
     res = record_expense.invoke({
         "channel_id": channel,

@@ -8,6 +8,8 @@ from tests.test_subagents import test_travel_tools_execution, test_vision_tools_
 from tests.test_normalization import (
     test_telegram_message_normalization,
     test_telegram_photo_normalization,
+    test_telegram_voice_normalization,
+    test_audio_transcription_service,
     test_whatsapp_message_normalization,
 )
 from tests.test_companion_pipeline import (
@@ -99,6 +101,12 @@ async def run_async_tests():
     await test_telegram_photo_normalization()
     print("  ✅ test_telegram_photo_normalization passed")
 
+    await test_telegram_voice_normalization()
+    print("  ✅ test_telegram_voice_normalization passed")
+
+    await test_audio_transcription_service()
+    print("  ✅ test_audio_transcription_service passed (OpenAI Whisper Speech-to-Text)")
+
     await test_whatsapp_message_normalization()
     print("  ✅ test_whatsapp_message_normalization passed")
 
@@ -121,7 +129,7 @@ if __name__ == "__main__":
     try:
         run_sync_tests()
         asyncio.run(run_async_tests())
-        print("\n🎉 ALL 28 TESTS PASSED SUCCESSFULLY (UNIT, MCP ECOSYSTEM, DEEPAGENTS SKILLS SPEC & PROGRESSIVE DISCLOSURE)!")
+        print("\n🎉 ALL 30 TESTS PASSED SUCCESSFULLY (UNIT, MCP ECOSYSTEM, DEEPAGENTS SKILLS SPEC & PROGRESSIVE DISCLOSURE)!")
         sys.exit(0)
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
