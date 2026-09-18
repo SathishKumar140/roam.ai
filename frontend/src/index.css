@@ -38,12 +38,14 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
 }
 
 /* Header */
 .app-header {
   height: 68px;
+  flex-shrink: 0;
   border-bottom: 1px solid var(--border-subtle);
   background: rgba(7, 9, 14, 0.85);
   backdrop-filter: blur(20px);
@@ -308,6 +310,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .msg-meta {
@@ -621,6 +625,7 @@ body {
 
 .text-input {
   flex: 1;
+  min-width: 0;
   background: transparent;
   border: none;
   outline: none;
@@ -658,4 +663,45 @@ body {
 .submit-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (max-width: 760px) {
+  .app-header {
+    height: 60px;
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .brand-section { gap: 8px; }
+  .brand-tag, .header-status .status-badge:not(:first-child) { display: none; }
+  .status-badge { padding: 6px 8px; }
+
+  .app-main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    height: auto;
+    max-height: none;
+  }
+
+  .app-sidebar {
+    padding: 8px 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    overflow: hidden;
+  }
+
+  .app-sidebar > div:not(:nth-child(2)), .app-sidebar .sidebar-title { display: none; }
+  .app-sidebar > div { min-width: 0; }
+  .members-stack { flex-direction: row; overflow-x: auto; }
+  .member-option { width: auto; flex-shrink: 0; gap: 6px; padding: 8px; }
+  .member-option > div:last-child > div:last-child { display: none; }
+
+  .messages-scroll { padding: 16px 12px; }
+  .message-row { max-width: 100%; gap: 8px; }
+  .bubble { padding: 10px 12px; }
+  .tool-tags, .tool-pill { min-width: 0; max-width: 100%; }
+  .prompts-carousel { padding: 8px 12px; }
+  .chat-footer { padding: 10px 12px max(12px, env(safe-area-inset-bottom)); }
+  .text-input { font-size: 16px; }
+  .submit-btn { flex-shrink: 0; padding: 9px 12px; }
 }

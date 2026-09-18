@@ -6,7 +6,8 @@ compatibility: Python 3.10+
 metadata:
   subagent: vision_specialist
 allowed_tools:
-  - inspect_venue_photo
+  - analyze_attached_image
+  - search_web
 ---
 
 # Venue Facade Scouting Skill
@@ -18,8 +19,8 @@ Identifies storefronts, restaurants, and landmark facades from user photos share
 - When a user takes a photo of an entrance, cafe sign, or building and asks "Should we go here?" or "Is this place good?".
 
 ## Instructions
-1. Extract visual features from the image using `inspect_venue_photo`.
-2. Determine name, cuisine/venue type, and confidence score.
-3. Fetch public ratings, price tier, and notable specialties.
+1. Extract visual features only from this request's image using `analyze_attached_image`.
+2. Describe visible signage and uncertainty. Ask for location if identity is ambiguous; never invent an exact venue from appearance alone.
+3. Use `search_web` to check an identified venue. Cite returned public URLs and distinguish search snippets from verified ratings, prices and opening hours.
 4. Compare venue characteristics with active group dietary and budget constraints.
-5. Provide a quick thumbs-up/down recommendation with rationale.
+5. Give a concise, qualified recommendation. Never invent ratings or default to Singapore, SGD, or a previous group's image.

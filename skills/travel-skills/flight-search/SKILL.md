@@ -13,7 +13,7 @@ allowed_tools:
 # Flight Search Skill
 
 ## Overview
-Connects to Google Flights via the Travel MCP Server to query specific flights or scan an entire month to discover the cheapest travel dates and lowest airfares.
+Queries specific flights or a bounded sample of travel windows via MCP. A sampled minimum is not the cheapest fare across the entire month.
 
 ## When to Use
 - When users mention specific travel dates between cities (use `search_flights`).
@@ -22,8 +22,11 @@ Connects to Google Flights via the Travel MCP Server to query specific flights o
 ## Instructions
 1. **Specific Dates**: If the user provides specific departure/return dates, call `search_flights(departure_id, arrival_id, outbound_date, return_date)`.
 2. **Find Cheapest / Suggest Dates across Month**: If the user asks for the cheapest dates, asks to suggest dates, or gives a month (e.g. "cheapest for 5 days next month"):
-   - DO NOT refuse or ask them to pick dates.
+  - Establish the route, explicit year/month, duration, traveler count and requested currency first.
    - Call `search_cheapest_flights_in_month(departure_id, arrival_id, month, duration_days)`.
    - Present the recommended cheapest dates, price comparisons across the tested windows, and top flight options!
 3. **Completely Missing Route/City**: If departure or destination is completely unknown, clarify the missing city.
 4. Format response highlighting the best travel dates, prices, carrier, departure times, and total travel time.
+5. The actual tool schema is authoritative. Supply departure_evidence_id and departure_text from this topic's user messages. Never default to SIN, a currency, or another trip's origin.
+6. Use future dates exactly as requested; ask about ambiguous years. Forward adults and currency. State whether fares are per person or total only if the provider establishes it.
+7. Report unavailable searches honestly. Cite only returned public URLs; distinguish sampled dates and search leads from confirmed fares or bookings.

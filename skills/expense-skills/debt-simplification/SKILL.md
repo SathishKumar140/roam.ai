@@ -1,26 +1,29 @@
 ---
 name: debt-simplification
-description: Calculates minimal cash transaction settlements for group expenses using bipartite graph net balances
+description: Proposes consent-required expense splits and reads confirmed group balances by currency
 license: MIT
 compatibility: Python 3.10+
 metadata:
   subagent: expense_specialist
 allowed_tools:
-  - record_expense
-  - get_debt_settlement
+  - propose_group_expense
+  - get_group_balances
 ---
 
 # Debt Simplification Skill
 
 ## Overview
-Computes net balances across all group participants and executes greedy bipartite graph reduction to minimize the number of repayment transactions (Splitwise-style).
+Reads confirmed net balances by currency. Pending and rejected proposals create no debt. The active tools do not execute payments or compute a guaranteed minimum-transaction settlement.
 
 ## When to Use
 - When participants log shared bills ("Alice paid $90 for dinner with Bob and Charlie").
 - When the group asks "Who owes what?" or "Settle up".
 
 ## Instructions
-1. When an expense is mentioned, log it with `record_expense(payer, amount, description, participants)`.
-2. To compute settlements, call `get_debt_settlement()`.
-3. Verify that net balances sum to zero across all users.
-4. Output concise settlement statements: "Alice pays Bob $30.00".
+1. A payment mention is not consent to split. Offer help, then confirm the amount, currency,
+  description, payer and actual participant IDs. Do not invent participants or infer currency from '$'.
+2. Use `propose_group_expense` in the scoped planner; all affected members confirm through
+  authenticated expense-specific buttons. Use `get_group_balances()` to read confirmed balances.
+3. Supply the payer's exact amount and currency quotes with their scoped message IDs. Use the latest evidence, not a year, budget or another member's estimate.
+4. Read balances with `get_group_balances`; keep currencies separate. Positive means owed, negative means owes. Do not manufacture ledger entries, approvals, repayments or a computed minimum settlement.
+5. Reuse existing tasks. A rejected split cannot be reopened and conflicting retries cannot change its terms. Chat text such as 'yes' is never an authenticated expense confirmation.

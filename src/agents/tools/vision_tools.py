@@ -188,7 +188,7 @@ def analyze_venue_photo(photo_url_or_id: str, context_caption: str = "") -> str:
         # Fallback if image bytes not downloadable (e.g. test runner mock IDs)
         place_name = context_caption.strip() if context_caption else "Historical Landmark & Cultural Center"
         location = "Singapore"
-        vibe = "Vibrant setting with warm ambient atmosphere, well-suited for group social gatherings"
+        vibe = "Vibrant setting with a warm, welcoming atmosphere, well-suited for group social gatherings"
         pricing_sgd = "SGD 15 – 35 per person"
         visual_evidence = "Analyzed from provided context and photo attributes"
         scout_tips = ["Popular destination spot", "Best visited during late afternoon or evening"]

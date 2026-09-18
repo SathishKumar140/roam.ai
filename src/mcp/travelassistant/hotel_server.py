@@ -4,6 +4,7 @@ import json
 import os
 import requests
 from typing import Dict, Any, List, Optional
+from urllib.parse import urlencode
 
 try:
     import truststore
@@ -40,31 +41,32 @@ TOOLS_DEFINITIONS = [
 from datetime import datetime, timedelta
 
 def ensure_future_date(date_str: Optional[str], fallback_days_ahead: int = 30) -> str:
-    """Ensures dates are valid future dates so Google Hotels / SerpApi will not reject them."""
-    now = datetime.now()
-    default_date = (now + timedelta(days=fallback_days_ahead)).strftime("%Y-%m-%d")
-    if not date_str or not isinstance(date_str, str):
-        return default_date
+    """Validate the supplied date without changing the user's travel plans."""
     try:
-        parts = date_str.strip().split("-")
-        if len(parts) == 3:
-            year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
-            if year < now.year:
-                year = now.year
-            parsed_dt = datetime(year, month, day)
-            if parsed_dt.date() < now.date():
-                parsed_dt = datetime(now.year + 1, month, day)
-            return parsed_dt.strftime("%Y-%m-%d")
-    except Exception as e:
-        sys.stderr.write(f"⚠️ [Hotel MCP] Could not parse date '{date_str}': {e}, defaulting to {default_date}\n")
-        sys.stderr.flush()
-    return default_date
+        parsed = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        raise ValueError("Ask for a valid travel date in YYYY-MM-DD format") from None
+    if parsed.isoformat() != date_str or parsed < datetime.now().date():
+        raise ValueError("Travel date is past or invalid; ask the user to confirm a future date")
+    return date_str
 
 def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
     loc = arguments.get("location", "")
-    in_date = ensure_future_date(arguments.get("check_in_date", ""), fallback_days_ahead=30)
-    out_date = ensure_future_date(arguments.get("check_out_date", ""), fallback_days_ahead=35)
-    currency = arguments.get("currency") or "SGD"
+    try:
+        in_date = ensure_future_date(arguments.get("check_in_date"))
+        out_date = ensure_future_date(arguments.get("check_out_date"))
+        if not loc or out_date <= in_date:
+            raise ValueError("Provide a location and a checkout date after check-in")
+    except ValueError as error:
+        return {"error": str(error), "properties": []}
+    currency = arguments.get("currency") or "USD"
+    adults = arguments.get("adults") if arguments.get("adults") is not None else 2
+    if type(adults) is not int or adults < 1:
+        return {"error": "adults must be a positive integer", "properties": []}
+    search_metadata = {
+        "location": loc, "check_in_date": in_date, "check_out_date": out_date,
+        "currency": currency, "adults": adults,
+    }
     api_key = os.getenv("SERPAPI_KEY")
 
     if api_key:
@@ -75,16 +77,26 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                 "q": loc,
                 "check_in_date": in_date,
                 "check_out_date": out_date,
-                "currency": currency
+                "currency": currency,
+                "adults": adults,
             }
             resp = requests.get("https://serpapi.com/search", params=params, timeout=15)
             if resp.status_code == 200:
                 data = resp.json()
                 props = data.get("properties", [])
                 if props:
+                    properties = []
+                    for hotel in props:
+                        public_link = hotel.get("link")
+                        properties.append({
+                            **{key: value for key, value in hotel.items() if key != "serpapi_property_details_link"},
+                            "link": public_link or "https://www.google.com/travel/hotels?" + urlencode({"q": f"{hotel.get('name', '')} {loc}"}),
+                            "link_type": "hotel_website" if public_link else "public_hotel_search",
+                        })
                     return {
                         "source": "mcp_travelassistant_live_google_hotels",
-                        "properties": props
+                        "search_metadata": search_metadata,
+                        "properties": properties
                     }
         except Exception:
             pass
@@ -99,7 +111,6 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                 {
                     "name": r.get("title", f"Accommodations in {loc}"),
                     "rate_per_night": {"extracted_lowest": "Live rate"},
-                    "overall_rating": 4.7,
                     "description": r.get("body", ""),
                     "link": r.get("href", "https://google.com/travel/hotels")
                 }
@@ -107,12 +118,7 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
             ]
             return {
                 "source": "mcp_travelassistant_live_hotel_search",
-                "search_metadata": {
-                    "location": loc,
-                    "check_in_date": in_date,
-                    "check_out_date": out_date,
-                    "currency": currency
-                },
+                "search_metadata": search_metadata,
                 "properties": properties
             }
     except Exception as e:
@@ -120,12 +126,7 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "source": "mcp_travelassistant_hotel_server",
-        "search_metadata": {
-            "location": loc,
-            "check_in_date": in_date,
-            "check_out_date": out_date,
-            "currency": currency
-        },
+        "search_metadata": search_metadata,
         "properties": []
     }
 

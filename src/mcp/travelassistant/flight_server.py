@@ -4,6 +4,7 @@ import json
 import os
 import requests
 import logging
+import re
 from typing import Dict, Any, Optional
 
 # Inject system truststore for SSL verification through enterprise proxies (e.g. Zscaler)
@@ -71,32 +72,14 @@ CITY_TO_IATA = {
 from datetime import datetime, timedelta
 
 def ensure_future_date(date_str: Optional[str], fallback_days_ahead: int = 30) -> str:
-    """Ensures dates are valid future dates so Google Flights / SerpApi will not reject them."""
-    now = datetime.now()
-    default_date = (now + timedelta(days=fallback_days_ahead)).strftime("%Y-%m-%d")
-    if not date_str or not isinstance(date_str, str):
-        return default_date
-    
+    """Validate the supplied date without changing the user's travel plans."""
     try:
-        parts = date_str.strip().split("-")
-        if len(parts) == 3:
-            year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
-            # If the year is in the past (e.g. 2025 or earlier), bump it to current year
-            if year < now.year:
-                year = now.year
-            parsed_dt = datetime(year, month, day)
-            # If the date has already passed this year, bump year by 1
-            if parsed_dt.date() < now.date():
-                parsed_dt = datetime(now.year + 1, month, day)
-            adjusted = parsed_dt.strftime("%Y-%m-%d")
-            if adjusted != date_str:
-                sys.stderr.write(f"⚠️ [Flight MCP] Adjusted past/hallucinated date '{date_str}' -> '{adjusted}'\n")
-                sys.stderr.flush()
-            return adjusted
-    except Exception as e:
-        sys.stderr.write(f"⚠️ [Flight MCP] Could not parse date '{date_str}': {e}, defaulting to {default_date}\n")
-        sys.stderr.flush()
-    return default_date
+        parsed = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        raise ValueError("Ask for a valid travel date in YYYY-MM-DD format") from None
+    if parsed.isoformat() != date_str or parsed < datetime.now().date():
+        raise ValueError("Travel date is past or invalid; ask the user to confirm a future date")
+    return date_str
 
 TOOLS_DEFINITIONS = [
     {
@@ -112,6 +95,7 @@ TOOLS_DEFINITIONS = [
                 "destination": {"type": "string", "description": "Alias for arrival_id"},
                 "date": {"type": "string", "description": "Alias for outbound_date"},
                 "return_date": {"type": "string", "description": "Return date in YYYY-MM-DD format (optional)"},
+                "adults": {"type": "integer", "description": "Number of adult travelers (default: 1); use the confirmed trip participants"},
                 "currency": {"type": "string", "description": "Currency code (default: 'USD')"}
             },
             "required": []
@@ -119,7 +103,7 @@ TOOLS_DEFINITIONS = [
     },
     {
         "name": "search_cheapest_flights_in_month",
-        "description": "Scans travel windows across an entire month (e.g. October 2026) using Google Flights to discover and rank the cheapest dates and lowest airfares for a given trip duration (e.g. 5 days). Use when the user asks to find the cheapest dates, asks the agent to suggest dates, or asks for the best price for a trip duration across a month.",
+        "description": "Samples up to four departure windows in an explicitly supplied month and year using Google Flights. Reports the lowest returned fare among those samples, not a guaranteed monthly minimum.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -127,6 +111,7 @@ TOOLS_DEFINITIONS = [
                 "arrival_id": {"type": "string", "description": "Arrival airport or city (e.g. 'TYO', 'HND', 'Tokyo')"},
                 "month": {"type": "string", "description": "Target month in YYYY-MM format (e.g. '2026-10') or name (e.g. 'October 2026')"},
                 "duration_days": {"type": "integer", "description": "Trip duration in days (default: 5)"},
+                "adults": {"type": "integer", "description": "Confirmed number of adult travelers (default: 1)"},
                 "origin": {"type": "string", "description": "Alias for departure_id"},
                 "destination": {"type": "string", "description": "Alias for arrival_id"},
                 "currency": {"type": "string", "description": "Currency code (default: 'USD')"}
@@ -138,9 +123,11 @@ TOOLS_DEFINITIONS = [
 
 def normalize_airport(val: str) -> str:
     cleaned = (val or "").strip().upper()
-    for city, iata in CITY_TO_IATA.items():
-        if city in cleaned:
-            return iata
+    if cleaned in CITY_TO_IATA:
+        return CITY_TO_IATA[cleaned]
+    match = re.fullmatch(r"(.+?)\s*\(([A-Z]{3})\)", cleaned)
+    if match and CITY_TO_IATA.get(match[1], match[2]) == match[2]:
+        return match[2]
     return cleaned
 
 def parse_serpapi_flights(raw_list: list) -> list:
@@ -171,13 +158,23 @@ def parse_serpapi_flights(raw_list: list) -> list:
     return results
 
 def search_flights_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
-    dep_raw = arguments.get("departure_id") or arguments.get("origin") or "SIN"
-    arr_raw = arguments.get("arrival_id") or arguments.get("destination") or "TYO"
+    dep_raw = arguments.get("departure_id") or arguments.get("origin")
+    arr_raw = arguments.get("arrival_id") or arguments.get("destination")
     raw_date = arguments.get("outbound_date") or arguments.get("date")
-    date = ensure_future_date(raw_date, fallback_days_ahead=30)
+    if not dep_raw or not arr_raw or not raw_date:
+        return {"error": "Ask for departure, destination and departure date before searching", "best_flights": [], "flights": []}
+    adults = arguments.get("adults") if arguments.get("adults") is not None else 1
+    if type(adults) is not int or adults < 1:
+        return {"error": "adults must be a positive integer", "best_flights": [], "flights": []}
     ret_date_raw = arguments.get("return_date")
-    ret_date = ensure_future_date(ret_date_raw, fallback_days_ahead=37) if ret_date_raw else None
-    currency = arguments.get("currency") or "SGD"
+    try:
+        date = ensure_future_date(raw_date)
+        ret_date = ensure_future_date(ret_date_raw) if ret_date_raw else None
+        if ret_date and ret_date < date:
+            raise ValueError("Return date must not precede departure; ask the user to clarify")
+    except ValueError as error:
+        return {"error": str(error), "best_flights": [], "flights": []}
+    currency = arguments.get("currency") or "USD"
     api_key = os.getenv("SERPAPI_KEY")
 
     dep = normalize_airport(dep_raw)
@@ -195,6 +192,7 @@ def search_flights_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                 "outbound_date": date,
                 "type": 1 if ret_date else 2,
                 "currency": currency,
+                "adults": adults,
                 "hl": "en"
             }
             if ret_date:
@@ -213,7 +211,10 @@ def search_flights_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                     "source": "mcp_travelassistant_live_google_flights",
                     "route": f"{dep} -> {arr}",
                     "date": date,
+                    "return_date": ret_date,
+                    "adults": adults,
                     "currency": currency,
+                    "link": data.get("search_metadata", {}).get("google_flights_url"),
                     "price_insights": data.get("price_insights", {}),
                     "best_flights": best,
                     "other_flights": other,
@@ -268,56 +269,37 @@ def search_cheapest_flights_in_month_handler(arguments: Dict[str, Any]) -> Dict[
     import calendar
     from concurrent.futures import ThreadPoolExecutor
 
-    dep_raw = arguments.get("departure_id") or arguments.get("origin") or "SIN"
-    arr_raw = arguments.get("arrival_id") or arguments.get("destination") or "TYO"
+    dep_raw = arguments.get("departure_id") or arguments.get("origin")
+    arr_raw = arguments.get("arrival_id") or arguments.get("destination")
+    if not dep_raw or not arr_raw:
+        return {"error": "Ask for departure and destination before searching", "best_flights": [], "flights": []}
     month_raw = str(arguments.get("month") or "").lower()
-    duration = int(arguments.get("duration_days") or 5)
-    currency = arguments.get("currency") or "SGD"
+    duration = arguments.get("duration_days", 5)
+    adults = arguments.get("adults", 1)
+    if type(duration) is not int or not 1 <= duration <= 28 or type(adults) is not int or adults < 1:
+        return {"error": "Confirm a trip duration of 1-28 days and a positive adult count", "best_flights": [], "flights": []}
+    currency = arguments.get("currency") or "USD"
     api_key = os.getenv("SERPAPI_KEY")
 
     dep = normalize_airport(dep_raw)
     arr = normalize_airport(arr_raw)
 
-    # Determine target year and month
     now = datetime.now()
-    month_names = {
-        "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
-        "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12
-    }
-    
-    target_year = now.year
-    target_month = now.month + 1 if now.month < 12 else 1
-    if now.month == 12:
-        target_year += 1
-
-    for m_name, m_num in month_names.items():
-        if m_name in month_raw:
-            target_month = m_num
-            if "2025" in month_raw:
-                target_year = now.year
-            elif "2027" in month_raw:
-                target_year = 2027
-            else:
-                target_year = now.year if target_month >= now.month else now.year + 1
-            break
-    
-    if "-" in month_raw:
+    parsed_month = None
+    for date_format in ("%Y-%m", "%B %Y"):
         try:
-            parts = month_raw.strip().split("-")
-            parsed_y = int(parts[0])
-            parsed_m = int(parts[1])
-            if parsed_y < now.year:
-                parsed_y = now.year
-            target_year, target_month = parsed_y, parsed_m
-        except Exception:
+            parsed_month = datetime.strptime(month_raw, date_format)
+            break
+        except ValueError:
             pass
+    if parsed_month is None or (parsed_month.year, parsed_month.month) < (now.year, now.month):
+        return {"error": "Ask for a future travel month with explicit year (YYYY-MM)", "best_flights": [], "flights": []}
+    target_year, target_month = parsed_month.year, parsed_month.month
 
     _, num_days = calendar.monthrange(target_year, target_month)
     
-    # Generate 4 distinct windows across the month (early, mid, mid-late, late)
-    step = max(5, (num_days - duration) // 4)
-    start_days = [min(num_days - duration, 4 + i * step) for i in range(4)]
-    start_days = sorted(list(set(start_days)))
+    first_day = now.day if (target_year, target_month) == (now.year, now.month) else 1
+    start_days = sorted({first_day + (num_days - first_day) * index // 3 for index in range(4)})
 
     candidate_windows = []
     for d in start_days:
@@ -342,6 +324,7 @@ def search_cheapest_flights_in_month_handler(arguments: Dict[str, Any]) -> Dict[
                 "return_date": ret_date,
                 "type": 1,
                 "currency": currency,
+                "adults": adults,
                 "hl": "en"
             }
             resp = requests.get("https://serpapi.com/search", params=params, timeout=12)
@@ -390,6 +373,8 @@ def search_cheapest_flights_in_month_handler(arguments: Dict[str, Any]) -> Dict[
             "route": f"{dep} -> {arr}",
             "month": f"{target_year}-{target_month:02d}",
             "trip_duration_days": duration,
+            "adults": adults,
+            "search_scope": "Lowest fare among sampled windows, not an exhaustive monthly minimum",
             "recommended_cheapest_dates": {
                 "departure_date": best_window["departure_date"],
                 "return_date": best_window["return_date"],
@@ -400,26 +385,17 @@ def search_cheapest_flights_in_month_handler(arguments: Dict[str, Any]) -> Dict[
             "best_flights_for_recommended_dates": best_window["flights"]
         }
 
-    # Fallback standard schedule
-    fallback_start = datetime(target_year, target_month, 15).strftime("%Y-%m-%d")
-    fallback_end = (datetime(target_year, target_month, 15) + timedelta(days=duration)).strftime("%Y-%m-%d")
     return {
         "source": "mcp_travelassistant_flight_server",
         "route": f"{dep} -> {arr}",
         "month": f"{target_year}-{target_month:02d}",
         "trip_duration_days": duration,
-        "recommended_cheapest_dates": {
-            "departure_date": fallback_start,
-            "return_date": fallback_end,
-            "lowest_price": 415.0,
-            "currency": currency
-        },
-        "tested_date_windows": [
-            {"dates": f"{fallback_start} to {fallback_end}", "lowest_price": "$415.00 USD", "airline": "Scoot", "is_cheapest": True}
-        ],
-        "best_flights_for_recommended_dates": [
-            {"flight": "TR 808", "airline": "Scoot", "departure": "01:25", "arrival": "09:05", "duration_minutes": 420, "price": 415.0}
-        ]
+        "adults": adults,
+        "status": "unavailable",
+        "message": "No live fares were returned; no cheapest dates or price can be recommended.",
+        "recommended_cheapest_dates": None,
+        "tested_date_windows": [],
+        "best_flights_for_recommended_dates": []
     }
 
 def handle_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:

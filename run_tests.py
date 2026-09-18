@@ -13,13 +13,13 @@ from tests.test_normalization import (
     test_whatsapp_message_normalization,
 )
 from tests.test_companion_pipeline import (
-    test_ambient_companion_travel_proposal,
-    test_ambient_companion_vision_photo_analysis,
-    test_ambient_companion_expense_logging_and_balance,
+    test_roamai_companion_travel_proposal,
+    test_roamai_companion_vision_photo_analysis,
+    test_roamai_companion_expense_logging_and_balance,
 )
 from tests.test_mcp_travel_server import test_travel_mcp_server_stdio
 from tests.test_mcp_client import test_mcp_client_tool_discovery, test_mcp_client_tool_invocation
-from tests.test_mcp_dynamic_learning import test_dynamic_mcp_skill_learning, test_ambient_companion_skill_query
+from tests.test_mcp_dynamic_learning import test_dynamic_mcp_skill_learning, test_roamai_companion_skill_query
 from tests.test_travelassistant_mcp import (
     test_travelassistant_mcp_servers_loaded,
     test_travelassistant_geocoder,
@@ -33,7 +33,7 @@ from tests.test_deepagents_skills import (
     test_subagent_isolated_skills_loading,
     test_progressive_disclosure_prompt_and_tool,
     test_dynamic_mcp_skill_folder_creation,
-    test_ambient_companion_skills_query,
+    test_roamai_companion_skills_query,
 )
 
 def run_sync_tests():
@@ -110,20 +110,20 @@ async def run_async_tests():
     await test_whatsapp_message_normalization()
     print("  ✅ test_whatsapp_message_normalization passed")
 
-    await test_ambient_companion_travel_proposal()
-    print("  ✅ test_ambient_companion_travel_proposal passed")
+    await test_roamai_companion_travel_proposal()
+    print("  ✅ test_roamai_companion_travel_proposal passed")
 
-    await test_ambient_companion_vision_photo_analysis()
-    print("  ✅ test_ambient_companion_vision_photo_analysis passed")
+    await test_roamai_companion_vision_photo_analysis()
+    print("  ✅ test_roamai_companion_vision_photo_analysis passed")
 
-    await test_ambient_companion_expense_logging_and_balance()
-    print("  ✅ test_ambient_companion_expense_logging_and_balance passed")
+    await test_roamai_companion_expense_logging_and_balance()
+    print("  ✅ test_roamai_companion_expense_logging_and_balance passed")
 
-    await test_ambient_companion_skill_query()
-    print("  ✅ test_ambient_companion_skill_query passed")
+    await test_roamai_companion_skill_query()
+    print("  ✅ test_roamai_companion_skill_query passed")
 
-    await test_ambient_companion_skills_query()
-    print("  ✅ test_ambient_companion_skills_query passed (DeepAgents Progressive Disclosure)")
+    await test_roamai_companion_skills_query()
+    print("  ✅ test_roamai_companion_skills_query passed (DeepAgents Progressive Disclosure)")
 
 if __name__ == "__main__":
     try:

@@ -3,13 +3,15 @@ import httpx
 from typing import Optional, Dict, Any, List
 from src.config import settings
 from src.adapters.base import ChannelAdapter
-from src.models.channel import ChannelEvent, ChannelUser, ChannelMedia, OutboundMessage, PlatformType
+from src.models.channel import ChannelEvent, ChannelUser, ChannelMedia, DeliveryResult, OutboundMessage, PlatformType
 
 logger = logging.getLogger("roam.telegram")
 
 class TelegramAdapter(ChannelAdapter):
-    def __init__(self, bot_token: Optional[str] = None):
+    def __init__(self, bot_token: Optional[str] = None, bot_username: Optional[str] = None):
         self.bot_token = bot_token or settings.TELEGRAM_BOT_TOKEN
+        self.bot_id = self.bot_token.split(":", 1)[0] if self.bot_token else "default"
+        self.bot_username = (bot_username or settings.TELEGRAM_BOT_USERNAME).lstrip("@").lower()
         self.base_url = f"https://api.telegram.org/bot{self.bot_token}" if self.bot_token else None
 
     @property
@@ -44,7 +46,11 @@ class TelegramAdapter(ChannelAdapter):
             return ChannelEvent(
                 event_id=f"tg_cb_{callback.get('id')}",
                 platform="telegram",
+                connection_id=self.bot_id,
                 channel_id=str(chat_data.get("id")),
+                message_id=str(msg.get("message_id")),
+                reply_to_message_id=str(msg.get("message_id")),
+                callback_data=callback.get("data", ""),
                 is_group=chat_data.get("type") in ["group", "supergroup"],
                 sender=ChannelUser(
                     id=str(sender_data.get("id")),
@@ -61,6 +67,8 @@ class TelegramAdapter(ChannelAdapter):
 
         chat = msg.get("chat", {})
         sender_data = msg.get("from", {})
+        if sender_data.get("is_bot") or not sender_data.get("id"):
+            return None
         text = msg.get("text") or msg.get("caption") or ""
         
         # Check for photos, voice notes, audio files, or locations
@@ -69,36 +77,19 @@ class TelegramAdapter(ChannelAdapter):
             # Pick highest resolution photo
             highest_res = msg["photo"][-1]
             file_id = highest_res.get("file_id")
-            file_url = await self.get_file_url(file_id) if file_id else None
             media = ChannelMedia(
                 type="photo",
                 file_id=file_id,
-                url=file_url
             )
         elif "voice" in msg or "audio" in msg or "video_note" in msg:
             audio_obj = msg.get("voice") or msg.get("audio") or msg.get("video_note") or {}
             file_id = audio_obj.get("file_id")
             mime_type = audio_obj.get("mime_type") or "audio/ogg"
-            file_url = await self.get_file_url(file_id) if file_id else None
             media = ChannelMedia(
                 type="voice",
                 file_id=file_id,
-                url=file_url,
                 mime_type=mime_type
             )
-            # Automatic Speech-to-Text Transcription via Whisper
-            if file_url:
-                try:
-                    from src.services.transcription import transcribe_audio_async
-                    filename = "voice.oga" if ("ogg" in mime_type or "oga" in mime_type) else "audio.mp3"
-                    transcribed = await transcribe_audio_async(file_url, mime_type=mime_type, filename=filename)
-                    if transcribed:
-                        logger.info(f"🎙️ [Telegram Voice Transcribed] -> \"{transcribed}\"")
-                        text = f"{text} {transcribed}".strip() if text else transcribed
-                        # Treat user voice message as an explicit interaction
-                        is_mentioned = True
-                except Exception as e:
-                    logger.warning(f"⚠️ Failed transcribing voice message: {e}")
             if not text:
                 text = "[Voice message]"
         elif "location" in msg:
@@ -111,12 +102,27 @@ class TelegramAdapter(ChannelAdapter):
 
         # Detect bot mention
         entities = msg.get("entities") or msg.get("caption_entities") or []
-        is_mentioned = any(e.get("type") == "mention" or e.get("type") == "bot_command" for e in entities)
+        is_mentioned = False
+        encoded = text.encode("utf-16-le")
+        for entity in entities:
+            start = entity.get("offset", 0) * 2
+            end = start + entity.get("length", 0) * 2
+            label = encoded[start:end].decode("utf-16-le", errors="replace").lower()
+            if entity.get("type") == "mention" and self.bot_username and label == "@" + self.bot_username:
+                is_mentioned = True
+            if entity.get("type") == "text_mention" and str(entity.get("user", {}).get("id")) == self.bot_id:
+                is_mentioned = True
+            if entity.get("type") == "bot_command" and ("@" not in label or label.endswith("@" + self.bot_username)):
+                is_mentioned = True
+        reply = msg.get("reply_to_message", {})
 
         return ChannelEvent(
-            event_id=f"tg_msg_{msg.get('message_id')}",
+            event_id=f"tg_update_{payload['update_id']}" if "update_id" in payload else f"tg_msg_{chat.get('id')}_{msg.get('message_id')}",
             platform="telegram",
+            connection_id=self.bot_id,
             channel_id=str(chat.get("id")),
+            message_id=str(msg.get("message_id")),
+            is_reply_to_bot=str(reply.get("from", {}).get("id")) == self.bot_id,
             is_group=chat.get("type") in ["group", "supergroup"],
             sender=ChannelUser(
                 id=str(sender_data.get("id")),
@@ -129,6 +135,42 @@ class TelegramAdapter(ChannelAdapter):
             is_bot_mentioned=is_mentioned,
             raw_payload=payload
         )
+
+    async def deliver(self, message: OutboundMessage) -> DeliveryResult:
+        if not self.base_url:
+            return DeliveryResult(success=False, permanent=True, error="Telegram credentials are not configured")
+        payload = {"chat_id": message.channel_id, "text": message.text}
+        if message.reply_to_message_id:
+            payload["reply_parameters"] = {"message_id": int(message.reply_to_message_id), "allow_sending_without_reply": True}
+        if message.buttons:
+            payload["reply_markup"] = {"inline_keyboard": [[
+                {"text": button.label, "url": button.url} if button.type == "url"
+                else {"text": button.label, "callback_data": button.id}
+                for button in row] for row in message.buttons]}
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(f"{self.base_url}/sendMessage", json=payload)
+        data = response.json()
+        success = response.status_code == 200 and data.get("ok", False)
+        return DeliveryResult(success=success,
+            provider_ids=[str(data["result"]["message_id"])] if success else [],
+            retry_after=data.get("parameters", {}).get("retry_after"),
+            permanent=400 <= response.status_code < 500 and response.status_code not in {408, 429},
+            error="" if success else f"Telegram HTTP {response.status_code}")
+
+    async def media_bytes(self, media: ChannelMedia):
+        url = await self.get_file_url(media.file_id) if media.file_id else None
+        if not url:
+            raise ValueError("Media could not be resolved")
+        async with httpx.AsyncClient(timeout=20) as client:
+            async with client.stream("GET", url) as response:
+                response.raise_for_status()
+                content = bytearray()
+                async for chunk in response.aiter_bytes():
+                    content.extend(chunk)
+                    if len(content) > 8 * 1024 * 1024:
+                        raise ValueError("Media exceeds the 8 MB processing limit")
+                mime = response.headers.get("content-type", media.mime_type or "application/octet-stream").split(";")[0]
+                return bytes(content), mime
 
     async def send_message(self, message: OutboundMessage) -> bool:
         if not self.base_url:

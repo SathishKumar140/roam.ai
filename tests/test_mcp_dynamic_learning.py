@@ -1,10 +1,13 @@
 import json
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.tools import tool
 from src.skills.mcp_skill_learner import (
     connect_external_mcp_server,
     list_connected_mcp_skills,
     disconnect_mcp_server
 )
-from src.agents.deep_companion import ambient_companion
+from src.agents.deep_companion import create_roamai_companion
+from tests.test_deepagents_skills import HarnessTestModel
 
 def test_dynamic_mcp_skill_learning():
     # 1. Connect a new MCP server dynamically
@@ -25,19 +28,22 @@ def test_dynamic_mcp_skill_learning():
     disc_res = disconnect_mcp_server.invoke({"server_name": "extra_travel_hub"})
     assert "Disconnected MCP server" in disc_res
 
-async def test_ambient_companion_skill_query():
-    # Ask the companion about its skills via chat
-    channel = "group_skills_test"
-    res = await ambient_companion.ainvoke(
-        {
-            "channel_id": channel,
-            "platform": "telegram",
-            "sender_name": "Alice",
-            "sender_id": "u1",
-            "text": "@companion what skills and MCP servers do you have?"
-        },
-        config={"configurable": {"thread_id": channel}}
-    )
+async def test_roamai_companion_skill_query():
+    @tool
+    def search_flights() -> str:
+        """An authorized flight capability for this inventory test."""
+        raise AssertionError("A capability query must not search flights")
 
-    assert "Active MCP Servers & Learned Skills" in res["output"] or "mcp" in res["output"].lower() or "skills" in res["output"].lower()
-    assert "search_flights" in res["output"] or "flight" in res["output"].lower()
+    model = HarnessTestModel(messages=iter([
+        AIMessage(content="", tool_calls=[{"name": "task", "id": "delegate", "args": {
+            "subagent_type": "skill_specialist", "description": "List the tools actually available to this request."}}]),
+        AIMessage(content="search_flights is authorized. MCP installation is administrator-only."),
+        AIMessage(content="search_flights is authorized. MCP installation is administrator-only."),
+    ]))
+    companion = create_roamai_companion(model=model, tools=[search_flights], request_context={"sender_name": "Alice"})
+    result = await companion.ainvoke({"messages": [HumanMessage(content="What skills and MCP tools are active?")]})
+    inventory = next(str(message.content) for message in model.observed_messages
+        if message.type == "system" and "Actual authorized tools by specialist" in str(message.content))
+    assert '"travel_specialist": ["search_flights"]' in inventory
+    assert '"skill_specialist": []' in inventory
+    assert [call["name"] for call in result["tool_calls"]] == ["subagent:skill_specialist"]

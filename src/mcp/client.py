@@ -4,6 +4,8 @@ import os
 import subprocess
 import sys
 import logging
+import threading
+import select
 from typing import Dict, Any, List, Optional
 from langchain_core.tools import StructuredTool
 from pydantic import create_model, Field
@@ -19,6 +21,7 @@ class MCPProcessConnection:
         self.proc: Optional[subprocess.Popen] = None
         self.tools_cache: List[Dict[str, Any]] = []
         self._req_id = 0
+        self._request_lock = threading.Lock()
 
     def start(self):
         env = os.environ.copy()
@@ -43,7 +46,7 @@ class MCPProcessConnection:
         self._send_request("initialize", {
             "protocolVersion": "2024-11-05",
             "capabilities": {},
-            "clientInfo": {"name": "ambient-mcp-client", "version": "1.0.0"}
+            "clientInfo": {"name": "roamai-mcp-client", "version": "1.0.0"}
         })
         init_res = self._read_response()
 
@@ -76,6 +79,9 @@ class MCPProcessConnection:
     def _read_response(self) -> Dict[str, Any]:
         if not self.proc or not self.proc.stdout:
             return {}
+        if not select.select([self.proc.stdout], [], [], 30)[0]:
+            self.close()
+            raise TimeoutError("MCP server did not respond within 30 seconds")
         line = self.proc.stdout.readline()
         if not line:
             return {}
@@ -84,11 +90,15 @@ class MCPProcessConnection:
     def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> str:
         formatted_args = json.dumps(arguments, indent=2)
         logger.info(f"\n==================== [MCP CALL: {self.name} -> {tool_name}] ====================\nArguments:\n{formatted_args}")
-        self._send_request("tools/call", {
-            "name": tool_name,
-            "arguments": arguments
-        })
-        res = self._read_response()
+        with self._request_lock:
+            request_id = self._send_request("tools/call", {
+                "name": tool_name,
+                "arguments": arguments
+            })
+            res = self._read_response()
+            if res.get("id") != request_id:
+                self.close()
+                raise RuntimeError("MCP response does not match the active request")
         content = res.get("result", {}).get("content", [])
         if content and len(content) > 0:
             output_text = content[0].get("text", "")

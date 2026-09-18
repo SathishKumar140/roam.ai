@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple
-from src.models.channel import ChannelEvent, OutboundMessage, PlatformType
+from src.models.channel import ChannelEvent, DeliveryResult, OutboundMessage, PlatformType
 
 class ChannelAdapter(ABC):
     @property
@@ -17,6 +17,9 @@ class ChannelAdapter(ABC):
     async def send_message(self, message: OutboundMessage) -> bool:
         """Sends message back to platform (with buttons/media if applicable)."""
         pass
+
+    async def deliver(self, message: OutboundMessage) -> DeliveryResult:
+        return DeliveryResult(success=await self.send_message(message))
 
     @abstractmethod
     async def send_typing(self, channel_id: str):

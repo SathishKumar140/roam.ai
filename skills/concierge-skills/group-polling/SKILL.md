@@ -6,7 +6,7 @@ compatibility: Python 3.10+
 metadata:
   subagent: proactive_concierge
 allowed_tools:
-  - schedule_departure_checkin
+  - create_group_poll
 ---
 
 # Group Polling Skill
@@ -20,6 +20,10 @@ Generates consensus polls and confirmation prompts with tap-to-vote interactive 
 
 ## Instructions
 1. Determine the core decision to resolve (e.g. "Ready for departure?").
-2. Formulate 2 to 3 discrete options (e.g. "Packed & Ready", "Running Late").
-3. Schedule checkin via `schedule_departure_checkin(trip_id, departure_time)`.
-4. Render interactive buttons in the channel adapter so users can tap to respond.
+2. Obtain 2 to 3 agreed discrete options, each at most 20 characters. Never invent choices to fill missing configuration.
+3. Obtain agreement to create the poll and establish its closing deadline. Call
+  `create_group_poll(question, options, closes_in_minutes)` only in the scoped group planner.
+4. Use the application's poll-specific buttons. Each authenticated member has one changeable vote.
+5. The durable worker closes the poll and reports totals. No votes or a tie is not a consensus.
+6. Votes do not authorize expenses, bookings or attendance commitments. Do not promise native platform polls.
+7. Reuse an existing active poll. Poll editing is unavailable; do not claim an update or create a duplicate when a follow-up is ambiguous.

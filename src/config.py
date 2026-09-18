@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -36,13 +36,19 @@ class Settings(BaseModel):
     # Messaging
     TELEGRAM_BOT_TOKEN: Optional[str] = os.getenv("TELEGRAM_BOT_TOKEN")
     TELEGRAM_WEBHOOK_SECRET: Optional[str] = os.getenv("TELEGRAM_WEBHOOK_SECRET")
+    TELEGRAM_BOT_USERNAME: str = os.getenv("TELEGRAM_BOT_USERNAME", "")
 
     WHATSAPP_API_TOKEN: Optional[str] = os.getenv("WHATSAPP_API_TOKEN")
     WHATSAPP_PHONE_NUMBER_ID: Optional[str] = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
-    WHATSAPP_VERIFY_TOKEN: str = os.getenv("WHATSAPP_VERIFY_TOKEN", "ambient_companion_verify_token")
+    WHATSAPP_VERIFY_TOKEN: str = os.getenv("WHATSAPP_VERIFY_TOKEN", "roamai_companion_verify_token")
+    WHATSAPP_APP_SECRET: Optional[str] = os.getenv("WHATSAPP_APP_SECRET")
+    ROAMAI_LISTENER_MODE: Literal["off", "shadow", "live"] = os.getenv("ROAMAI_LISTENER_MODE", "shadow")
+    ROAMAI_ALLOWED_GROUPS: str = os.getenv("ROAMAI_ALLOWED_GROUPS", "")
+    ROAMAI_DEBOUNCE_SECONDS: float = float(os.getenv("ROAMAI_DEBOUNCE_SECONDS", "10"))
+    ROAMAI_OFFER_COOLDOWN_SECONDS: float = float(os.getenv("ROAMAI_OFFER_COOLDOWN_SECONDS", "300"))
 
     # Storage paths
-    SQLITE_DB_PATH: str = os.getenv("SQLITE_DB_PATH", "ambient_companion.db")
+    SQLITE_DB_PATH: str = os.getenv("SQLITE_DB_PATH", "roamai_companion.db")
     CHECKPOINT_DB_PATH: str = os.getenv("CHECKPOINT_DB_PATH", "agent_memory.db")
 
     # Langfuse Tracing & Observability
@@ -56,7 +62,7 @@ class Settings(BaseModel):
 settings = Settings()
 
 
-def get_llm(provider: Optional[str] = None):
+def get_llm(provider: Optional[str] = None, *, allow_fake: bool = True):
     """
     Factory function returning a model instance based on available API keys or provider preference.
     Supports Google Gemini (free-tier), Groq, and OpenAI.
@@ -84,6 +90,9 @@ def get_llm(provider: Optional[str] = None):
             )
         except Exception:
             pass
+
+    if not allow_fake:
+        raise RuntimeError("No live model could be initialized; check provider configuration and connectivity")
 
     # Fallback to standard chat interface or dummy mock for local testing
     try:

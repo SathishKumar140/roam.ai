@@ -6,7 +6,7 @@ compatibility: Python 3.10+
 metadata:
   subagent: vision_specialist
 allowed_tools:
-  - inspect_venue_photo
+  - analyze_attached_image
 ---
 
 # Menu & Receipt OCR Skill
@@ -19,7 +19,8 @@ Extracts itemized dish lists, prices, currency signs, and bill totals from photo
 - When someone snaps a photo of the dinner bill to split costs.
 
 ## Instructions
-1. Inspect image content using `inspect_venue_photo`.
+1. Inspect only this request's image using `analyze_attached_image`. Missing or unreadable attachments require clarification, not a cached image from another conversation.
 2. Extract line items, quantities, and subtotal amounts.
-3. Identify dish names for dietary filtering (highlight vegan, nut, gluten items).
-4. For receipts: summarize the final total and forward item totals to `expense_specialist`.
+3. Identify visible dietary labels; ingredients and allergen safety not printed on the menu remain unverified.
+4. For receipts, distinguish subtotal, tax, tip and final total; mark unreadable digits unknown. '$' does not establish a currency.
+5. Return the transcription to the supervisor. The payer must confirm amount, currency and participants in chat before the expense specialist can propose a split. The image itself is not consent or payer-authored amount evidence.

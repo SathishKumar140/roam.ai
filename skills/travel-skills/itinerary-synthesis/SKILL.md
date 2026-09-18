@@ -6,6 +6,7 @@ compatibility: Python 3.10+
 metadata:
   subagent: travel_specialist
 allowed_tools:
+  - search_web
   - calculate_distance
   - search_events
 ---
@@ -25,3 +26,5 @@ Synthesizes comprehensive day-by-day itineraries by clustering venues geographic
 3. Check for local festivals or seasonal events using `search_events`.
 4. Structure the day: Morning (attraction), Midday (meal matching diet), Afternoon (culture/leisure), Evening (dinner/nightlife).
 5. Ensure pacing allows buffer time between activities.
+6. Research actual places with `search_web` when needed. Use this topic's current dates, budget and preferences; never import constraints from another trip.
+7. Cite returned sources and mark unverified opening hours, suitability and travel times. Generic attractions are not confirmed scheduled events. A proposed itinerary creates no poll, reminder, booking or expense.

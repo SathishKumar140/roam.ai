@@ -2,7 +2,7 @@ import httpx
 from typing import Optional, Dict, Any, List
 from src.config import settings
 from src.adapters.base import ChannelAdapter
-from src.models.channel import ChannelEvent, ChannelUser, ChannelMedia, OutboundMessage, PlatformType
+from src.models.channel import ChannelEvent, ChannelUser, ChannelMedia, DeliveryResult, OutboundMessage, PlatformType
 
 class WhatsAppAdapter(ChannelAdapter):
     def __init__(
@@ -31,8 +31,10 @@ class WhatsAppAdapter(ChannelAdapter):
                 return None
 
             msg = messages[0]
-            contact = contacts[0] if contacts else {}
             sender_id = msg.get("from")
+            if not sender_id or not msg.get("id"):
+                return None
+            contact = next((item for item in contacts if item.get("wa_id") == sender_id), contacts[0] if contacts else {})
             sender_name = contact.get("profile", {}).get("name", "WhatsApp User")
 
             msg_type = msg.get("type")
@@ -62,12 +64,15 @@ class WhatsAppAdapter(ChannelAdapter):
                     longitude=loc.get("longitude")
                 )
 
-            # In WhatsApp, group messages have group JID or sender_id
             return ChannelEvent(
                 event_id=f"wa_{msg.get('id')}",
                 platform="whatsapp",
-                channel_id=sender_id, # Or group JID
-                is_group=False,       # Can be determined by JID format (e.g. @g.us)
+                connection_id=value.get("metadata", {}).get("phone_number_id") or self.phone_number_id or "default",
+                channel_id=sender_id,
+                message_id=msg.get("id"),
+                reply_to_message_id=msg.get("context", {}).get("id"),
+                callback_data=text if msg_type == "interactive" else None,
+                is_group=False,
                 sender=ChannelUser(
                     id=sender_id,
                     name=sender_name
@@ -79,6 +84,40 @@ class WhatsAppAdapter(ChannelAdapter):
             )
         except Exception:
             return None
+
+    async def parse_events(self, payload: Dict[str, Any]) -> List[ChannelEvent]:
+        events = []
+        for entry in payload.get("entry", []):
+            for change in entry.get("changes", []):
+                value = change.get("value", {})
+                for message in value.get("messages", []):
+                    envelope = {"entry": [{"changes": [{"value": value | {"messages": [message]}}]}]}
+                    event = await self.parse_webhook(envelope)
+                    if event:
+                        events.append(event)
+        return events
+
+    async def deliver(self, message: OutboundMessage) -> DeliveryResult:
+        if not self.base_url or not self.api_token:
+            return DeliveryResult(success=False, permanent=True, error="WhatsApp credentials are not configured")
+        payload = {"messaging_product": "whatsapp", "to": message.channel_id, "type": "text", "text": {"body": message.text}}
+        if message.reply_to_message_id:
+            payload["context"] = {"message_id": message.reply_to_message_id}
+        if message.buttons:
+            payload.pop("text")
+            payload.update(type="interactive", interactive={"type": "button", "body": {"text": message.text}, "action": {
+                "buttons": [{"type": "reply", "reply": {"id": button.id, "title": button.label[:20]}}
+                            for row in message.buttons for button in row][:3]}})
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(self.base_url, headers={"Authorization": f"Bearer {self.api_token}"}, json=payload)
+        data = response.json()
+        code = data.get("error", {}).get("code")
+        retryable = response.status_code in {408, 429} or response.status_code >= 500 or code in {4, 17, 32, 613, 130429, 131000, 131048, 131056}
+        return DeliveryResult(success=response.is_success,
+            provider_ids=[item["id"] for item in data.get("messages", [])],
+            retry_after=float(response.headers["Retry-After"]) if response.headers.get("Retry-After", "").isdigit() else None,
+            permanent=not response.is_success and not retryable,
+            error="" if response.is_success else f"WhatsApp HTTP {response.status_code}, code {code}")
 
     async def send_message(self, message: OutboundMessage) -> bool:
         if not self.base_url or not self.api_token:

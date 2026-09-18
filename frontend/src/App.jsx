@@ -25,14 +25,23 @@ export default function App() {
       sender: 'RoamAI',
       isRoamAI: true,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      text: "Hey group! 🌍 I'm your roam concierge. I passively listen in this group chat and step in whenever summoned, or when you need travel booking, itineraries, or expense debt simplification.\n\nTry sending a message or click any prompt below!",
+      text: "Hey group! I'm RoamAI. What are we planning?",
       buttons: []
     }
   ])
   const [currentSender, setCurrentSender] = useState(SENDER_PRESETS[0])
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [channelId] = useState('group_tokyo_summer')
+  const [channelId] = useState(() => {
+    const stored = sessionStorage.getItem('roamai-channel') || `web_${crypto.randomUUID()}`
+    sessionStorage.setItem('roamai-channel', stored)
+    return stored
+  })
+  const [addressBot, setAddressBot] = useState(true)
+  const [listenerMode, setListenerMode] = useState('connecting')
+  const [connectionError, setConnectionError] = useState('')
+  const [waitingForReply, setWaitingForReply] = useState(false)
+  const receivedSequence = useRef(0)
   const messagesScrollRef = useRef(null)
   const messagesEndRef = useRef(null)
 
@@ -51,7 +60,38 @@ export default function App() {
     scrollToBottom()
   }, [messages, isLoading])
 
-  const handleSendMessage = async (textToSend) => {
+  useEffect(() => {
+    let stopped = false
+    let timer
+    const controller = new AbortController()
+    const receive = async () => {
+      try {
+        const response = await fetch(`/api/chat/messages?channel_id=${encodeURIComponent(channelId)}&after=${receivedSequence.current}`, { signal: controller.signal })
+        if (!response.ok) throw new Error(`Connection unavailable (${response.status})`)
+        const data = await response.json()
+        if (stopped) return
+        setConnectionError('')
+        setListenerMode(data.listener_mode)
+        if (data.messages.length) {
+          receivedSequence.current = data.messages.at(-1).sequence
+          setWaitingForReply(false)
+          setMessages((previous) => [...previous, ...data.messages.map((message) => ({
+            id: `server_${message.sequence}`, sender: 'RoamAI', isRoamAI: true,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            text: message.text, buttons: (message.buttons || []).flat(), toolCalls: message.tool_calls || []
+          }))])
+        }
+      } catch (error) {
+        if (!stopped) setConnectionError(error.message)
+      } finally {
+        if (!stopped) timer = setTimeout(receive, 1500)
+      }
+    }
+    receive()
+    return () => { stopped = true; clearTimeout(timer); controller.abort() }
+  }, [channelId])
+
+  const handleSendMessage = async (textToSend, callbackData = null) => {
     const text = (textToSend || inputValue).trim()
     if (!text || isLoading) return
 
@@ -79,23 +119,15 @@ export default function App() {
           channel_id: channelId,
           sender_name: currentSender.name,
           sender_id: currentSender.id,
-          text: text
+          text: text,
+          client_message_id: crypto.randomUUID(),
+          is_bot_mentioned: addressBot,
+          callback_data: callbackData
         })
       })
 
-      const data = await response.json()
-      if (data && data.output) {
-        const aiMsg = {
-          id: `ai_${Date.now()}`,
-          sender: 'RoamAI',
-          isRoamAI: true,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          text: data.output,
-          buttons: data.buttons ? data.buttons.flat() : [],
-          toolCalls: data.tool_calls || []
-        }
-        setMessages((prev) => [...prev, aiMsg])
-      }
+      if (!response.ok) throw new Error(`Request was not accepted (${response.status})`)
+      setWaitingForReply(addressBot || Boolean(callbackData))
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -115,9 +147,9 @@ export default function App() {
 
   const handleButtonClick = (button) => {
     if (button.url) {
-      window.open(button.url, '_blank')
+      window.open(button.url, '_blank', 'noopener,noreferrer')
     } else {
-      handleSendMessage(button.label)
+      handleSendMessage(button.label, button.id)
     }
   }
 
@@ -135,13 +167,13 @@ export default function App() {
         <div className="header-status">
           <div className="status-badge">
             <span className="status-dot"></span>
-            <span>Gemini Flash Active</span>
+            <span>Listener: {listenerMode}</span>
           </div>
           <div className="status-badge">
             <span>✈️ Travel MCP</span>
           </div>
           <div className="status-badge">
-            <span>💾 SQLite Sliding Window</span>
+            <span>💾 Durable queue</span>
           </div>
         </div>
       </header>
@@ -151,12 +183,9 @@ export default function App() {
         {/* Sidebar */}
         <aside className="app-sidebar">
           <div>
-            <div className="sidebar-title">Ambient Group Context</div>
+            <div className="sidebar-title">RoamAI Group Context</div>
             <div className="group-card">
-              <div className="group-name">🏖️ Tokyo Summer Getaway</div>
-              <div className="group-subtext">
-                RoamAI silently arbitrates constraints and synthesizes plans when summoned.
-              </div>
+              <div className="group-name">Group Planner</div>
             </div>
           </div>
 
@@ -182,13 +211,12 @@ export default function App() {
           </div>
 
           <div>
-            <div className="sidebar-title">Specialist Subagents</div>
+            <div className="sidebar-title">Group Services</div>
             <div className="subagents-list">
-              <div className="agent-tag">✈️ travel_specialist (Flights & Hotels)</div>
-              <div className="agent-tag">💸 expense_specialist (Debt Simplifier)</div>
-              <div className="agent-tag">📸 vision_specialist (Landmarks & OCR)</div>
-              <div className="agent-tag">⏰ proactive_concierge (State Machine)</div>
-              <div className="agent-tag">🔌 skill_specialist (Dynamic MCP)</div>
+              <div className="agent-tag">Conversation listener</div>
+              <div className="agent-tag">Live discovery</div>
+              <div className="agent-tag">Expense consent</div>
+              <div className="agent-tag">Polls and reminders</div>
             </div>
           </div>
         </aside>
@@ -256,10 +284,10 @@ export default function App() {
               </div>
             ))}
 
-            {isLoading && (
+            {(isLoading || waitingForReply) && (
               <div className="typing-row">
                 <div className="spinner-pulse"></div>
-                <span>RoamAI is thinking and querying tools...</span>
+                <span>{isLoading ? 'Sending...' : 'Request queued or processing...'}</span>
               </div>
             )}
             <div ref={messagesEndRef} />
@@ -280,6 +308,11 @@ export default function App() {
 
           {/* Footer Input */}
           <div className="chat-footer">
+            <label style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+              <input type="checkbox" checked={addressBot} onChange={(event) => setAddressBot(event.target.checked)} />
+              Address RoamAI
+            </label>
+            {connectionError && <div role="alert">{connectionError}</div>}
             <div className="input-container">
               <input
                 type="text"

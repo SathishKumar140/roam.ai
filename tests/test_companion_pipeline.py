@@ -1,91 +1,61 @@
-from src.storage.database import db
-from src.models.channel import ChannelEvent, ChannelUser, ChannelMedia
-from src.agents.deep_companion import ambient_companion
+import json
 
-async def test_ambient_companion_travel_proposal():
-    channel = "group_trip_99"
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.tools import tool
 
-    # Seed some background conversation into SQLite buffer
-    db.buffer_message(ChannelEvent(
-        event_id="bg_1",
-        platform="telegram",
-        channel_id=channel,
-        sender=ChannelUser(id="u1", name="Alice"),
-        text="I prefer beach villas and vegetarian food."
-    ))
-    db.buffer_message(ChannelEvent(
-        event_id="bg_2",
-        platform="telegram",
-        channel_id=channel,
-        sender=ChannelUser(id="u2", name="Bob"),
-        text="Keep it under $150 per night."
-    ))
+from src.agents.deep_companion import create_roamai_companion
+from tests.test_deepagents_skills import HarnessTestModel
 
-    # Ask the companion to plan
-    res = await ambient_companion.ainvoke(
-        {
-            "channel_id": channel,
-            "platform": "telegram",
-            "sender_name": "Charlie",
-            "sender_id": "u3",
-            "text": "@companion let's plan a trip to Bali!",
-            "history": db.get_recent_group_messages(channel)
-        },
-        config={"configurable": {"thread_id": channel}}
-    )
 
-    assert "Trip Proposal" in res["output"] or "trip proposal" in res["output"].lower()
-    assert "Recommended Flight" in res["output"]
-    assert "Recommended Stay" in res["output"]
-    assert "buttons" in res
-    assert len(res["buttons"]) > 0
+async def invoke_specialist(specialist, candidate, arguments, context):
+    model = HarnessTestModel(messages=iter([
+        AIMessage(content="", tool_calls=[{"name": "task", "id": "delegate", "args": {
+            "subagent_type": specialist, "description": "Handle the scoped request with your supplied tool."}}]),
+        AIMessage(content="", tool_calls=[{"name": candidate.name, "id": "execute", "args": arguments}]),
+        AIMessage(content="Task handled."),
+        AIMessage(content="Task handled."),
+    ]))
+    companion = create_roamai_companion(model=model, tools=[candidate], request_context=context)
+    result = await companion.ainvoke({"messages": [HumanMessage(content=json.dumps(context))]})
+    assert {call["name"] for call in result["tool_calls"]} >= {"subagent:" + specialist, candidate.name}
+    return result, model
 
-async def test_ambient_companion_vision_photo_analysis():
-    channel = "group_trip_99"
 
-    res = await ambient_companion.ainvoke(
-        {
-            "channel_id": channel,
-            "platform": "telegram",
-            "sender_name": "Alice",
-            "sender_id": "u1",
-            "text": "What do you think of this place?",
-            "media": {"type": "photo", "file_id": "photo_xyz"}
-        },
-        config={"configurable": {"thread_id": channel}}
-    )
+async def test_roamai_companion_travel_proposal():
+    @tool
+    def search_hotels(destination: str, adults: int, currency: str) -> str:
+        """Return the scoped hotel search parameters for this test."""
+        return json.dumps({"destination": destination, "adults": adults, "currency": currency})
 
-    assert "Scout Analysis" in res["output"] or "scout" in res["output"].lower() or "analysis" in res["output"].lower()
-    assert "Vibe" in res["output"] or "vibe" in res["output"].lower()
-    assert "Pricing" in res["output"] or "pricing" in res["output"].lower() or "price" in res["output"].lower()
-    assert "buttons" in res
+    context = {"topic": "Bali", "preferences": {"diet": "vegetarian", "budget": "USD 150/night"}}
+    result, model = await invoke_specialist("travel_specialist", search_hotels,
+        {"destination": "Bali", "adults": 2, "currency": "USD"}, context)
+    response = next(message for message in result["tool_results"] if message.name == "search_hotels")
+    assert json.loads(response.content) == {"destination": "Bali", "adults": 2, "currency": "USD"}
+    assert any(message.type == "system" and "USD 150/night" in str(message.content) for message in model.observed_messages)
 
-async def test_ambient_companion_expense_logging_and_balance():
-    channel = "group_trip_99"
 
-    # 1. Log an expense
-    log_res = await ambient_companion.ainvoke(
-        {
-            "channel_id": channel,
-            "platform": "telegram",
-            "sender_name": "Alice",
-            "sender_id": "u1",
-            "text": "I paid $120 for dinner"
-        },
-        config={"configurable": {"thread_id": channel}}
-    )
-    assert any(w in log_res["output"].lower() for w in ["logged", "record", "expense", "dinner", "paid"])
+async def test_roamai_companion_vision_photo_analysis():
+    @tool
+    def analyze_attached_image(question: str) -> str:
+        """Return an unreadable-image result without inventing a venue."""
+        return json.dumps({"error": "No resolved image is attached to this request."})
 
-    # 2. Ask for balance
-    bal_res = await ambient_companion.ainvoke(
-        {
-            "channel_id": channel,
-            "platform": "telegram",
-            "sender_name": "Bob",
-            "sender_id": "u2",
-            "text": "Who owes what right now?"
-        },
-        config={"configurable": {"thread_id": channel}}
-    )
-    assert "Group Expense Settlement Sheet" in bal_res["output"] or "settlement" in bal_res["output"].lower() or "owes" in bal_res["output"].lower()
-    assert "Alice" in bal_res["output"]
+    result, model = await invoke_specialist("vision_specialist", analyze_attached_image,
+        {"question": "What is this place?"}, {"has_attached_image": False})
+    response = next(message for message in result["tool_results"] if message.name == "analyze_attached_image")
+    assert "error" in json.loads(response.content)
+    assert all("analyze_venue_photo" not in names for names in model.bound_tool_names)
+
+
+async def test_roamai_companion_expense_logging_and_balance():
+    @tool
+    def get_group_balances() -> str:
+        """Return confirmed balances only; the supplied expense is pending."""
+        return "{}"
+
+    result, model = await invoke_specialist("expense_specialist", get_group_balances, {},
+        {"tasks": {"expenses": [{"amount": "120", "currency": "USD", "state": "pending"}]}})
+    response = next(message for message in result["tool_results"] if message.name == "get_group_balances")
+    assert json.loads(response.content) == {}
+    assert all(not {"record_expense", "confirm_expense_split"}.intersection(names) for names in model.bound_tool_names)

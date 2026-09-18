@@ -3,6 +3,7 @@ import sys
 import json
 import os
 import requests
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
 try:
@@ -35,51 +36,35 @@ TOOLS_DEFINITIONS = [
 ]
 
 def search_events_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
-    query = arguments.get("query", "")
-    loc = arguments.get("location", "")
-    date_filter = arguments.get("date_filter", "upcoming")
-    api_key = os.getenv("SERPAPI_KEY")
-
-    if api_key:
-        try:
-            params = {
-                "engine": "google_events",
-                "api_key": api_key,
-                "q": f"{query} in {loc}"
-            }
-            resp = requests.get("https://serpapi.com/search", params=params, timeout=15)
-            if resp.status_code == 200:
-                data = resp.json()
-                return {
-                    "source": "mcp_travelassistant_live_events",
-                    "events_results": data.get("events_results", [])
-                }
-        except Exception:
-            pass
-
-    # High-quality structured fallback for common destinations
-    return {
-        "source": "mcp_travelassistant_event_server",
-        "query": query,
-        "location": loc,
-        "date_filter": date_filter,
-        "events": [
-            {
-                "title": f"{loc.title()} Cultural & Music Sunset Festival",
-                "date": {"start_date": "Upcoming Weekend", "when": "Sat, 6:00 PM – 11:00 PM"},
-                "venue": {"name": f"{loc.title()} Open-Air Amphitheatre"},
-                "description": f"Celebration of local heritage, artisan food stalls, acoustic performances, and cultural showcases in {loc}.",
-                "ticket_info": "Free admission / VIP lounge packages available"
-            },
-            {
-                "title": f"{loc.title()} Nature & Sunrise Guided Trail Excursion",
-                "date": {"start_date": "Daily", "when": "Daily at 07:00 AM"},
-                "venue": {"name": f"{loc.title()} National Park Trailhead"},
-                "description": "Guided scenic trek with wildlife photography stops, panoramic mountain/coastline lookouts, and botanical insights.",
-                "ticket_info": "$25 per person including trail permit and breakfast snack"
-            }
-        ]
-    }
+    query = arguments.get("query") or ""
+    loc = arguments.get("location") or ""
+    date_filter = arguments.get("date_filter") or "upcoming"
+    api_key = os.getenv("SERPAPI_KEY") or os.getenv("SERP_API_KEY")
+    result = {"source": "serpapi_google_events", "query": query, "location": loc,
+              "date_filter": date_filter, "events_results": [],
+              "retrieved_at": datetime.now(timezone.utc).isoformat()}
+    filters = {"upcoming": None, "today": "today", "tomorrow": "tomorrow", "this_week": "week",
+               "this_weekend": "weekend", "next_week": "next_week",
+               "this_month": "month", "next_month": "next_month"}
+    if date_filter not in filters:
+        return result | {"status": "unavailable", "error": "Unsupported date filter; use " + ", ".join(filters)}
+    if not query.strip() or not loc.strip():
+        return result | {"status": "unavailable", "error": "A query and confirmed location are required"}
+    if not api_key:
+        return result | {"status": "unavailable", "error": "Event search is not configured"}
+    params = {"engine": "google_events", "api_key": api_key, "q": f"{query} in {loc}"}
+    if filters[date_filter]:
+        params["htichips"] = "date:" + filters[date_filter]
+    try:
+        response = requests.get("https://serpapi.com/search", params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("error"):
+            return result | {"status": "unavailable", "error": "Event provider returned an error"}
+        events = data.get("events_results", [])
+        return result | {"status": "ok" if events else "empty", "events_results": events}
+    except (requests.RequestException, ValueError):
+        return result | {"status": "unavailable", "error": "Live event search failed; no events have been verified"}
 
 def handle_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     if name == "search_events":

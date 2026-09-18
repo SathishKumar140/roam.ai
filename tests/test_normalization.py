@@ -2,7 +2,7 @@ from src.adapters.telegram import TelegramAdapter
 from src.adapters.whatsapp import WhatsAppAdapter
 
 async def test_telegram_message_normalization():
-    adapter = TelegramAdapter()
+    adapter = TelegramAdapter(bot_username="companion_bot")
     sample_payload = {
         "update_id": 1001,
         "message": {
