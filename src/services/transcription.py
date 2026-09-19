@@ -16,10 +16,9 @@ WHISPER_TRAVEL_PROMPT = (
     "expense, dinner, bill, split, paid SGD, owes, ledger, confirmation, count me in, I'm in."
 )
 
+
 async def transcribe_audio_async(
-    audio_source: Union[bytes, str],
-    mime_type: str = "audio/ogg",
-    filename: str = "voice.oga"
+    audio_source: Union[bytes, str], mime_type: str = "audio/ogg", filename: str = "voice.oga"
 ) -> Optional[str]:
     """
     Transcribes audio bytes or audio from a URL/file path using OpenAI Whisper-1.
@@ -75,31 +74,28 @@ async def transcribe_audio_async(
     # 4. Transcribe using OpenAI Whisper API with travel domain conditioning
     try:
         from openai import AsyncOpenAI
+
         client = AsyncOpenAI(api_key=api_key)
         transcription = await client.audio.transcriptions.create(
-            model="whisper-1",
-            file=(filename, audio_bytes, mime_type),
-            prompt=WHISPER_TRAVEL_PROMPT,
-            language="en"
+            model="whisper-1", file=(filename, audio_bytes, mime_type), prompt=WHISPER_TRAVEL_PROMPT, language="en"
         )
         text = transcription.text.strip()
-        logger.info(f"🎙️ [Whisper Transcribed] \"{text}\"")
+        logger.info(f'🎙️ [Whisper Transcribed] "{text}"')
         return text
     except Exception as e:
         logger.error(f"❌ OpenAI Whisper transcription failed: {e}")
         return None
 
-def transcribe_audio(
-    audio_source: Union[bytes, str],
-    mime_type: str = "audio/ogg",
-    filename: str = "voice.oga"
-) -> Optional[str]:
+
+def transcribe_audio(audio_source: Union[bytes, str], mime_type: str = "audio/ogg", filename: str = "voice.oga") -> Optional[str]:
     """Synchronous wrapper for transcribe_audio_async."""
     import asyncio
+
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 return pool.submit(asyncio.run, transcribe_audio_async(audio_source, mime_type, filename)).result()
         return loop.run_until_complete(transcribe_audio_async(audio_source, mime_type, filename))
@@ -107,8 +103,9 @@ def transcribe_audio(
         # Fallback to direct synchronous OpenAI client
         try:
             from openai import OpenAI
+
             client = OpenAI(api_key=settings.OPENAI_API_KEY)
-            
+
             audio_bytes: Optional[bytes] = None
             if isinstance(audio_source, bytes):
                 audio_bytes = audio_source
@@ -125,10 +122,7 @@ def transcribe_audio(
                 return None
 
             res = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=(filename, audio_bytes, mime_type),
-                prompt=WHISPER_TRAVEL_PROMPT,
-                language="en"
+                model="whisper-1", file=(filename, audio_bytes, mime_type), prompt=WHISPER_TRAVEL_PROMPT, language="en"
             )
             return res.text.strip()
         except Exception as ex:

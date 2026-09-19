@@ -1,0 +1,2 @@
+# Development-only tooling (formatting/linting), not required to run the app.
+ruff>=0.7.0

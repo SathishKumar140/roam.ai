@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple
+from typing import Optional
 from src.models.channel import ChannelEvent, DeliveryResult, OutboundMessage, PlatformType
+
 
 class ChannelAdapter(ABC):
     @property

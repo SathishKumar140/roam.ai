@@ -13,8 +13,8 @@ TOOLS_DEFINITIONS = [
             "properties": {
                 "location": {"type": "string", "description": "Location name (e.g. 'Banff, Alberta', 'Bali', 'Reston, Virginia')"}
             },
-            "required": ["location"]
-        }
+            "required": ["location"],
+        },
     },
     {
         "name": "calculate_distance",
@@ -23,11 +23,11 @@ TOOLS_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "origin": {"type": "string", "description": "Origin location"},
-                "destination": {"type": "string", "description": "Destination location"}
+                "destination": {"type": "string", "description": "Destination location"},
             },
-            "required": ["origin", "destination"]
-        }
-    }
+            "required": ["origin", "destination"],
+        },
+    },
 ]
 
 COORDINATE_DATABASE = {
@@ -38,28 +38,24 @@ COORDINATE_DATABASE = {
     "bali": (-8.4095, 115.1889, "Bali, Indonesia"),
     "tokyo": (35.6762, 139.6503, "Tokyo, Japan"),
     "singapore": (1.3521, 103.8198, "Singapore"),
-    "paris": (48.8566, 2.3522, "Paris, France")
+    "paris": (48.8566, 2.3522, "Paris, France"),
 }
+
 
 def geocode_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
     loc = arguments.get("location", "").lower()
     for key, (lat, lon, full_name) in COORDINATE_DATABASE.items():
         if key in loc:
-            return {
-                "source": "mcp_travelassistant_geocoder",
-                "query": loc,
-                "display_name": full_name,
-                "latitude": lat,
-                "longitude": lon
-            }
+            return {"source": "mcp_travelassistant_geocoder", "query": loc, "display_name": full_name, "latitude": lat, "longitude": lon}
     # Generic fallback
     return {
         "source": "mcp_travelassistant_geocoder",
         "query": loc,
         "display_name": loc.title(),
         "latitude": 51.1784,
-        "longitude": -115.5708
+        "longitude": -115.5708,
     }
+
 
 def distance_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
     orig = arguments.get("origin", "").lower()
@@ -73,7 +69,7 @@ def distance_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
 
     dlat = lat2 - lat1
     dlon = lon2 - lon1
-    a = math.sin(dlat / 2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2)**2
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     km = round(6371 * c, 1)
     miles = round(km * 0.621371, 1)
@@ -84,8 +80,9 @@ def distance_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
         "destination": dest_geo["display_name"],
         "distance_km": km,
         "distance_miles": miles,
-        "approx_drive_time_hours": round(km / 90, 1) if km < 1000 else "Flight required"
+        "approx_drive_time_hours": round(km / 90, 1) if km < 1000 else "Flight required",
     }
+
 
 def handle_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     if name == "geocode_location":
@@ -95,6 +92,7 @@ def handle_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         res = distance_handler(arguments)
         return {"content": [{"type": "text", "text": json.dumps(res, indent=2)}]}
     return {"isError": True, "content": [{"type": "text", "text": f"Unknown tool: {name}"}]}
+
 
 def run_server():
     for line in sys.stdin:
@@ -117,8 +115,8 @@ def run_server():
                 "result": {
                     "protocolVersion": "2024-11-05",
                     "serverInfo": {"name": "mcp-travelassistant-geocoder", "version": "1.0.0"},
-                    "capabilities": {"tools": {}}
-                }
+                    "capabilities": {"tools": {}},
+                },
             }
             sys.stdout.write(json.dumps(resp) + "\n")
             sys.stdout.flush()
@@ -133,6 +131,7 @@ def run_server():
             resp = {"jsonrpc": "2.0", "id": req_id, "result": call_res}
             sys.stdout.write(json.dumps(resp) + "\n")
             sys.stdout.flush()
+
 
 if __name__ == "__main__":
     run_server()

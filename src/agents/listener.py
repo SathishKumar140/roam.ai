@@ -60,6 +60,7 @@ class GroupListener:
     async def observe(self, context: dict, batch: list[dict]) -> Observation:
         if self.model is None:
             from src.config import get_llm
+
             self.model = get_llm(allow_fake=False)
         schema = Observation.model_json_schema()
         message_ids = sorted({message["id"] for message in context.get("messages", []) + batch})
@@ -83,35 +84,36 @@ class GroupListener:
 
         def transport_schema(value):
             if isinstance(value, dict):
-                return {key: transport_schema(child) for key, child in value.items()
+                return {
+                    key: transport_schema(child)
+                    for key, child in value.items()
                     if key not in {"default", "maxLength", "minLength", "maxItems", "minItems"}
-                    and not (key == "title" and isinstance(child, str))}
+                    and not (key == "title" and isinstance(child, str))
+                }
             if isinstance(value, list):
                 return [transport_schema(child) for child in value]
             return value
 
-        result = await self.model.with_structured_output(transport_schema(schema)).ainvoke([
-            SystemMessage(content=LISTENER_PROMPT),
-            HumanMessage(content=json.dumps({"group_context": context, "new_messages": batch}, default=str)),
-        ])
+        result = await self.model.with_structured_output(transport_schema(schema)).ainvoke(
+            [
+                SystemMessage(content=LISTENER_PROMPT),
+                HumanMessage(content=json.dumps({"group_context": context, "new_messages": batch}, default=str)),
+            ]
+        )
         return Observation.model_validate(result)
 
 
-def participation(observation: Observation, event: ChannelEvent, context: dict,
-                  cooldown: float = 300, now: float | None = None) -> str:
+def participation(observation: Observation, event: ChannelEvent, context: dict, cooldown: float = 300, now: float | None = None) -> str:
     now = time.time() if now is None else now
     topic = next((item for item in context.get("topics", []) if item["id"] == observation.topic_id), None)
-    if observation.decision == "decline" and topic and (
-        event.explicitly_addressed or topic.get("offered_to") == event.sender.id
-    ):
+    if observation.decision == "decline" and topic and (event.explicitly_addressed or topic.get("offered_to") == event.sender.id):
         return "decline"
     if event.explicitly_addressed:
         return "respond"
     if observation.confidence < 0.8:
         return "silent"
     if observation.decision == "respond" and observation.accepts_offer and topic:
-        if (topic["state"] == "offered" and topic.get("offered_to") == event.sender.id
-                and now - topic.get("last_offer", 0) < 3600):
+        if topic["state"] == "offered" and topic.get("offered_to") == event.sender.id and now - topic.get("last_offer", 0) < 3600:
             return "respond"
     if observation.decision == "respond" and observation.continues_task and topic and topic["state"] == "active":
         previous = next((item for item in context.get("outbound", []) if item["topic_id"] == topic["id"]), None)

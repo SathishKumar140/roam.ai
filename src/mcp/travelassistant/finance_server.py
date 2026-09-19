@@ -12,10 +12,10 @@ TOOLS_DEFINITIONS = [
             "properties": {
                 "from_currency": {"type": "string", "description": "Source currency code (e.g. 'USD', 'CAD', 'EUR', 'SGD')"},
                 "to_currency": {"type": "string", "description": "Target currency code (e.g. 'USD', 'CAD', 'EUR', 'SGD')"},
-                "amount": {"type": "number", "description": "Amount to convert (default: 1.0)"}
+                "amount": {"type": "number", "description": "Amount to convert (default: 1.0)"},
             },
-            "required": ["from_currency", "to_currency", "amount"]
-        }
+            "required": ["from_currency", "to_currency", "amount"],
+        },
     }
 ]
 
@@ -24,17 +24,18 @@ import requests
 # Extended baseline currency exchange rates against USD (fallback)
 RATES_TO_USD = {
     "USD": 1.0,
-    "CAD": 0.74,     # 1 CAD = 0.74 USD
-    "EUR": 1.08,     # 1 EUR = 1.08 USD
-    "GBP": 1.29,     # 1 GBP = 1.29 USD
-    "SGD": 0.78,     # 1 SGD = 0.78 USD
-    "JPY": 0.0068,   # 1 JPY = 0.0068 USD
-    "IDR": 0.000063, # 1 IDR = 0.000063 USD
-    "AUD": 0.66,     # 1 AUD = 0.66 USD
-    "VND": 0.000039, # 1 VND = 0.000039 USD (1 SGD ≈ 20,000 VND)
-    "THB": 0.030,    # 1 THB = 0.030 USD
-    "MYR": 0.23      # 1 MYR = 0.23 USD
+    "CAD": 0.74,  # 1 CAD = 0.74 USD
+    "EUR": 1.08,  # 1 EUR = 1.08 USD
+    "GBP": 1.29,  # 1 GBP = 1.29 USD
+    "SGD": 0.78,  # 1 SGD = 0.78 USD
+    "JPY": 0.0068,  # 1 JPY = 0.0068 USD
+    "IDR": 0.000063,  # 1 IDR = 0.000063 USD
+    "AUD": 0.66,  # 1 AUD = 0.66 USD
+    "VND": 0.000039,  # 1 VND = 0.000039 USD (1 SGD ≈ 20,000 VND)
+    "THB": 0.030,  # 1 THB = 0.030 USD
+    "MYR": 0.23,  # 1 MYR = 0.23 USD
 }
+
 
 def convert_currency_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
     from_curr = str(arguments.get("from_currency", "SGD") or "SGD").upper().strip()
@@ -62,6 +63,7 @@ def convert_currency_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
         try:
             from duckduckgo_search import DDGS
             import re
+
             q = f"{amt} {from_curr} to {to_curr} currency exchange rate"
             results = list(DDGS().text(q, max_results=3))
             for r in results:
@@ -93,14 +95,16 @@ def convert_currency_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
         "converted_amount": target_val,
         "exchange_rate": rate_display,
         "rate_source": source,
-        "formatted": f"{amt:,.2f} {from_curr} = {target_val:,.2f} {to_curr} (1 {from_curr} ≈ {rate_display} {to_curr})"
+        "formatted": f"{amt:,.2f} {from_curr} = {target_val:,.2f} {to_curr} (1 {from_curr} ≈ {rate_display} {to_curr})",
     }
+
 
 def handle_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     if name == "convert_currency":
         res = convert_currency_handler(arguments)
         return {"content": [{"type": "text", "text": json.dumps(res, indent=2)}]}
     return {"isError": True, "content": [{"type": "text", "text": f"Unknown tool: {name}"}]}
+
 
 def run_server():
     for line in sys.stdin:
@@ -123,8 +127,8 @@ def run_server():
                 "result": {
                     "protocolVersion": "2024-11-05",
                     "serverInfo": {"name": "mcp-travelassistant-finance", "version": "1.0.0"},
-                    "capabilities": {"tools": {}}
-                }
+                    "capabilities": {"tools": {}},
+                },
             }
             sys.stdout.write(json.dumps(resp) + "\n")
             sys.stdout.flush()
@@ -139,6 +143,7 @@ def run_server():
             resp = {"jsonrpc": "2.0", "id": req_id, "result": call_res}
             sys.stdout.write(json.dumps(resp) + "\n")
             sys.stdout.flush()
+
 
 if __name__ == "__main__":
     run_server()

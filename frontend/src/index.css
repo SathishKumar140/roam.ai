@@ -302,8 +302,14 @@ body {
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .msg-bubble-wrap {
@@ -363,9 +369,15 @@ body {
   margin-top: 0;
 }
 
-.markdown-content h1 { font-size: 18px; }
-.markdown-content h2 { font-size: 16px; }
-.markdown-content h3 { font-size: 15px; }
+.markdown-content h1 {
+  font-size: 18px;
+}
+.markdown-content h2 {
+  font-size: 16px;
+}
+.markdown-content h3 {
+  font-size: 15px;
+}
 
 .markdown-content ul,
 .markdown-content ol {
@@ -492,8 +504,15 @@ body {
 }
 
 @keyframes pulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.3); opacity: 0.6; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.6;
+  }
 }
 
 .tool-calls-label {
@@ -596,7 +615,9 @@ body {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Input Bar */
@@ -672,9 +693,16 @@ body {
     gap: 8px;
   }
 
-  .brand-section { gap: 8px; }
-  .brand-tag, .header-status .status-badge:not(:first-child) { display: none; }
-  .status-badge { padding: 6px 8px; }
+  .brand-section {
+    gap: 8px;
+  }
+  .brand-tag,
+  .header-status .status-badge:not(:first-child) {
+    display: none;
+  }
+  .status-badge {
+    padding: 6px 8px;
+  }
 
   .app-main {
     grid-template-columns: minmax(0, 1fr);
@@ -690,18 +718,53 @@ body {
     overflow: hidden;
   }
 
-  .app-sidebar > div:not(:nth-child(2)), .app-sidebar .sidebar-title { display: none; }
-  .app-sidebar > div { min-width: 0; }
-  .members-stack { flex-direction: row; overflow-x: auto; }
-  .member-option { width: auto; flex-shrink: 0; gap: 6px; padding: 8px; }
-  .member-option > div:last-child > div:last-child { display: none; }
+  .app-sidebar > div:not(:nth-child(2)),
+  .app-sidebar .sidebar-title {
+    display: none;
+  }
+  .app-sidebar > div {
+    min-width: 0;
+  }
+  .members-stack {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  .member-option {
+    width: auto;
+    flex-shrink: 0;
+    gap: 6px;
+    padding: 8px;
+  }
+  .member-option > div:last-child > div:last-child {
+    display: none;
+  }
 
-  .messages-scroll { padding: 16px 12px; }
-  .message-row { max-width: 100%; gap: 8px; }
-  .bubble { padding: 10px 12px; }
-  .tool-tags, .tool-pill { min-width: 0; max-width: 100%; }
-  .prompts-carousel { padding: 8px 12px; }
-  .chat-footer { padding: 10px 12px max(12px, env(safe-area-inset-bottom)); }
-  .text-input { font-size: 16px; }
-  .submit-btn { flex-shrink: 0; padding: 9px 12px; }
+  .messages-scroll {
+    padding: 16px 12px;
+  }
+  .message-row {
+    max-width: 100%;
+    gap: 8px;
+  }
+  .bubble {
+    padding: 10px 12px;
+  }
+  .tool-tags,
+  .tool-pill {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .prompts-carousel {
+    padding: 8px 12px;
+  }
+  .chat-footer {
+    padding: 10px 12px max(12px, env(safe-area-inset-bottom));
+  }
+  .text-input {
+    font-size: 16px;
+  }
+  .submit-btn {
+    flex-shrink: 0;
+    padding: 9px 12px;
+  }
 }

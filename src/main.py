@@ -2,13 +2,14 @@ import os
 import hashlib
 import hmac
 import uuid
+
 try:
     import truststore
+
     truststore.inject_into_ssl()
 except Exception:
     pass
 
-import asyncio
 import logging
 from fastapi import FastAPI, HTTPException, Request, Response, Query
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -33,12 +34,15 @@ telegram_adapter = TelegramAdapter()
 whatsapp_adapter = WhatsAppAdapter()
 roamai_store = RoamAIStore(settings.SQLITE_DB_PATH)
 roamai_service = RoamAIService(
-    roamai_store, GroupListener(), GroupPlanner(),
+    roamai_store,
+    GroupListener(),
+    GroupPlanner(),
     adapters={"telegram": telegram_adapter, "whatsapp": whatsapp_adapter},
     mode=settings.ROAMAI_LISTENER_MODE,
     cooldown=settings.ROAMAI_OFFER_COOLDOWN_SECONDS,
     debounce=settings.ROAMAI_DEBOUNCE_SECONDS,
 )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -49,11 +53,12 @@ async def lifespan(app: FastAPI):
     finally:
         await roamai_service.stop()
 
+
 app = FastAPI(
     title="RoamAI",
     description="Omnichannel RoamAI AI Companion for WhatsApp & Telegram using LangChain DeepAgent & MCP",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -63,6 +68,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 async def process_roamai_event(event: ChannelEvent):
     if event.is_group and not event.explicitly_addressed:
@@ -84,7 +90,7 @@ async def health_check():
         "service": "RoamAI",
         "framework": "LangChain DeepAgent & MCP",
         "supported_channels": ["telegram", "whatsapp"],
-        "chat_ui": "/"
+        "chat_ui": "/",
     }
 
 
@@ -93,6 +99,7 @@ async def readiness_check():
     result = roamai_service.readiness()
     return JSONResponse({key: value for key, value in result.items() if key != "queues"}, status_code=200 if result["ready"] else 503)
 
+
 @app.get("/chat", response_class=HTMLResponse)
 async def chat_page():
     react_index = os.path.abspath(os.path.join(os.path.dirname(__file__), "../frontend/dist/index.html"))
@@ -100,6 +107,7 @@ async def chat_page():
         with open(react_index, "r", encoding="utf-8") as f:
             return f.read()
     return HTMLResponse("<h2>Frontend not built. Please run: npm run build --prefix frontend</h2>", status_code=404)
+
 
 class WebChatRequest(BaseModel):
     channel_id: str = Field(default="web_group_1", min_length=1, max_length=100)
@@ -125,10 +133,17 @@ async def runtime_status():
 @app.post("/api/chat", status_code=202)
 async def api_chat(payload: WebChatRequest):
     require_local_chat()
-    event = ChannelEvent(event_id="web_" + payload.client_message_id, platform="mock", connection_id="web",
-        channel_id=payload.channel_id, sender=ChannelUser(id=payload.sender_id, name=payload.sender_name),
-        text=payload.text, message_id=payload.client_message_id,
-        is_bot_mentioned=payload.is_bot_mentioned or bool(payload.callback_data), callback_data=payload.callback_data)
+    event = ChannelEvent(
+        event_id="web_" + payload.client_message_id,
+        platform="mock",
+        connection_id="web",
+        channel_id=payload.channel_id,
+        sender=ChannelUser(id=payload.sender_id, name=payload.sender_name),
+        text=payload.text,
+        message_id=payload.client_message_id,
+        is_bot_mentioned=payload.is_bot_mentioned or bool(payload.callback_data),
+        callback_data=payload.callback_data,
+    )
     await process_roamai_event(event)
     return {"queued": True, "request_id": event.event_id, "responded": False}
 
@@ -136,9 +151,11 @@ async def api_chat(payload: WebChatRequest):
 @app.get("/api/chat/messages")
 async def web_messages(channel_id: str = Query(max_length=100), after: int = Query(default=0, ge=0)):
     require_local_chat()
-    event = ChannelEvent(event_id="lookup", platform="mock", connection_id="web", channel_id=channel_id,
-                         sender=ChannelUser(id="lookup", name="lookup"))
+    event = ChannelEvent(
+        event_id="lookup", platform="mock", connection_id="web", channel_id=channel_id, sender=ChannelUser(id="lookup", name="lookup")
+    )
     return {"messages": roamai_store.web_messages(event.conversation_id, after), "listener_mode": settings.ROAMAI_LISTENER_MODE}
+
 
 # ------------------------------------------------------------------------------
 # Telegram Webhook
@@ -155,6 +172,7 @@ async def telegram_webhook(request: Request):
         await process_roamai_event(event)
     return Response(status_code=200, content="OK")
 
+
 # ------------------------------------------------------------------------------
 # WhatsApp Cloud API Webhook
 # ------------------------------------------------------------------------------
@@ -170,6 +188,7 @@ async def whatsapp_verify(request: Request):
         return Response(content=challenge, media_type="text/plain")
     return Response(status_code=403, content="Verification failed")
 
+
 @app.post("/webhook/whatsapp")
 async def whatsapp_webhook(request: Request):
     if not settings.WHATSAPP_APP_SECRET:
@@ -184,10 +203,10 @@ async def whatsapp_webhook(request: Request):
         await process_roamai_event(event)
     return Response(status_code=200, content="OK")
 
+
 # ------------------------------------------------------------------------------
 # Mount React + Vite Frontend (dist)
 # ------------------------------------------------------------------------------
 frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "../frontend/dist"))
 if os.path.exists(frontend_dist):
     app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
-

@@ -12,6 +12,7 @@ logger = logging.getLogger("roam.ai.vision")
 _channel_media_cache: Dict[str, Any] = {}
 _latest_media: Optional[Dict[str, Any]] = None
 
+
 def set_channel_media(channel_id: str, media: Any):
     """Caches the latest media object for a channel to ensure tools have direct access."""
     global _latest_media
@@ -29,8 +30,10 @@ def set_channel_media(channel_id: str, media: Any):
             _latest_media = d
         logger.info(f"📸 [Vision] Cached active media for channel {channel_id}: {_latest_media}")
 
+
 def get_channel_media(channel_id: str) -> Optional[Dict[str, Any]]:
     return _channel_media_cache.get(channel_id) or _latest_media
+
 
 def _fetch_image_bytes(photo_url_or_id: str) -> Optional[Tuple[bytes, str]]:
     """
@@ -58,7 +61,9 @@ def _fetch_image_bytes(photo_url_or_id: str) -> Optional[Tuple[bytes, str]]:
     # 2. Check HTTP URL
     if target.startswith("http://") or target.startswith("https://"):
         try:
-            headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
             with httpx.Client(timeout=20.0, follow_redirects=True, headers=headers) as client:
                 resp = client.get(target)
                 if resp.status_code == 200:
@@ -73,10 +78,7 @@ def _fetch_image_bytes(photo_url_or_id: str) -> Optional[Tuple[bytes, str]]:
         try:
             with httpx.Client(timeout=15.0) as client:
                 # Step 1: getFile metadata
-                meta_resp = client.get(
-                    f"https://api.telegram.org/bot{token}/getFile",
-                    params={"file_id": target}
-                )
+                meta_resp = client.get(f"https://api.telegram.org/bot{token}/getFile", params={"file_id": target})
                 if meta_resp.status_code == 200:
                     file_path = meta_resp.json().get("result", {}).get("file_path")
                     if file_path:
@@ -98,6 +100,7 @@ def _fetch_image_bytes(photo_url_or_id: str) -> Optional[Tuple[bytes, str]]:
 
     return None
 
+
 def _run_gpt4o_vision(image_bytes: bytes, mime_type: str, caption: str = "") -> Optional[Dict[str, Any]]:
     """
     Submits image bytes to OpenAI GPT-4o Multimodal Vision for landmark and venue recognition.
@@ -109,6 +112,7 @@ def _run_gpt4o_vision(image_bytes: bytes, mime_type: str, caption: str = "") -> 
 
     try:
         from openai import OpenAI
+
         client = OpenAI(api_key=api_key)
         b64_data = base64.b64encode(image_bytes).decode("utf-8")
 
@@ -123,13 +127,13 @@ def _run_gpt4o_vision(image_bytes: bytes, mime_type: str, caption: str = "") -> 
             f"User caption/context: '{caption}'.\n\n"
             "Return a strictly valid JSON object with the following fields:\n"
             "{\n"
-            "  \"detected_place\": \"Exact venue or landmark name\",\n"
-            "  \"city_country\": \"City, Country\",\n"
-            "  \"visual_evidence\": \"Key visual cues (signage text, architecture, landscape) confirming this place\",\n"
-            "  \"vibe\": \"Authentic atmosphere, style, and setting\",\n"
-            "  \"pricing_sgd\": \"Pricing or admission in SGD (e.g. Free admission, or ~SGD 15-25 / person)\",\n"
-            "  \"search_query\": \"Targeted query to search web reviews and live info\",\n"
-            "  \"scout_tips\": [\"Insider tip 1\", \"Insider tip 2\"]\n"
+            '  "detected_place": "Exact venue or landmark name",\n'
+            '  "city_country": "City, Country",\n'
+            '  "visual_evidence": "Key visual cues (signage text, architecture, landscape) confirming this place",\n'
+            '  "vibe": "Authentic atmosphere, style, and setting",\n'
+            '  "pricing_sgd": "Pricing or admission in SGD (e.g. Free admission, or ~SGD 15-25 / person)",\n'
+            '  "search_query": "Targeted query to search web reviews and live info",\n'
+            '  "scout_tips": ["Insider tip 1", "Insider tip 2"]\n'
             "}"
         )
 
@@ -138,25 +142,26 @@ def _run_gpt4o_vision(image_bytes: bytes, mime_type: str, caption: str = "") -> 
             messages=[
                 {
                     "role": "system",
-                    "content": "You are an expert location scout and multimodal vision recognition engine. Respond in valid JSON only."
+                    "content": "You are an expert location scout and multimodal vision recognition engine. Respond in valid JSON only.",
                 },
                 {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64_data}"}}
-                    ]
-                }
+                        {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64_data}"}},
+                    ],
+                },
             ],
             response_format={"type": "json_object"},
             max_tokens=800,
-            temperature=0.1
+            temperature=0.1,
         )
         content = response.choices[0].message.content
         return json.loads(content)
     except Exception as e:
         logger.error(f"❌ GPT-4o Vision API call failed: {e}")
         return None
+
 
 @tool
 def analyze_venue_photo(photo_url_or_id: str, context_caption: str = "") -> str:
@@ -198,6 +203,7 @@ def analyze_venue_photo(photo_url_or_id: str, context_caption: str = "") -> str:
     search_context = []
     try:
         from duckduckgo_search import DDGS
+
         results = list(DDGS().text(f"{search_query} reviews pricing", max_results=3))
         search_context = [r.get("body", "") for r in results if r.get("body")]
     except Exception as e:
@@ -219,13 +225,13 @@ def analyze_venue_photo(photo_url_or_id: str, context_caption: str = "") -> str:
         "rating": rating,
         "highlights": highlights[:3],
         "scout_analysis": (
-            f"Scout Analysis complete: Identified '{place_name}' ({location}). "
-            f"{visual_evidence}. Estimated pricing: {pricing_sgd}."
+            f"Scout Analysis complete: Identified '{place_name}' ({location}). {visual_evidence}. Estimated pricing: {pricing_sgd}."
         ),
-        "recommendation": f"Scout Analysis complete for {place_name}. Recommended for your group."
+        "recommendation": f"Scout Analysis complete for {place_name}. Recommended for your group.",
     }
 
     logger.info(f"✅ [analyze_venue_photo] Completed scout analysis for '{place_name}' at {location}: {pricing_sgd}")
     return json.dumps(result, indent=2)
+
 
 vision_tools = [analyze_venue_photo]

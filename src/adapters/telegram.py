@@ -1,11 +1,12 @@
 import logging
 import httpx
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 from src.config import settings
 from src.adapters.base import ChannelAdapter
 from src.models.channel import ChannelEvent, ChannelUser, ChannelMedia, DeliveryResult, OutboundMessage, PlatformType
 
 logger = logging.getLogger("roam.telegram")
+
 
 class TelegramAdapter(ChannelAdapter):
     def __init__(self, bot_token: Optional[str] = None, bot_username: Optional[str] = None):
@@ -55,11 +56,11 @@ class TelegramAdapter(ChannelAdapter):
                 sender=ChannelUser(
                     id=str(sender_data.get("id")),
                     name=f"{sender_data.get('first_name', '')} {sender_data.get('last_name', '')}".strip() or "User",
-                    handle=sender_data.get("username")
+                    handle=sender_data.get("username"),
                 ),
                 text=callback.get("data", ""),
                 is_bot_mentioned=True,
-                raw_payload=payload
+                raw_payload=payload,
             )
 
         if not msg:
@@ -70,7 +71,7 @@ class TelegramAdapter(ChannelAdapter):
         if sender_data.get("is_bot") or not sender_data.get("id"):
             return None
         text = msg.get("text") or msg.get("caption") or ""
-        
+
         # Check for photos, voice notes, audio files, or locations
         media = None
         if "photo" in msg and len(msg["photo"]) > 0:
@@ -85,20 +86,12 @@ class TelegramAdapter(ChannelAdapter):
             audio_obj = msg.get("voice") or msg.get("audio") or msg.get("video_note") or {}
             file_id = audio_obj.get("file_id")
             mime_type = audio_obj.get("mime_type") or "audio/ogg"
-            media = ChannelMedia(
-                type="voice",
-                file_id=file_id,
-                mime_type=mime_type
-            )
+            media = ChannelMedia(type="voice", file_id=file_id, mime_type=mime_type)
             if not text:
                 text = "[Voice message]"
         elif "location" in msg:
             loc = msg["location"]
-            media = ChannelMedia(
-                type="location",
-                latitude=loc.get("latitude"),
-                longitude=loc.get("longitude")
-            )
+            media = ChannelMedia(type="location", latitude=loc.get("latitude"), longitude=loc.get("longitude"))
 
         # Detect bot mention
         entities = msg.get("entities") or msg.get("caption_entities") or []
@@ -127,13 +120,13 @@ class TelegramAdapter(ChannelAdapter):
             sender=ChannelUser(
                 id=str(sender_data.get("id")),
                 name=f"{sender_data.get('first_name', '')} {sender_data.get('last_name', '')}".strip() or "User",
-                handle=sender_data.get("username")
+                handle=sender_data.get("username"),
             ),
             text=text,
             media=media,
             reply_to_message_id=str(msg.get("reply_to_message", {}).get("message_id")) if msg.get("reply_to_message") else None,
             is_bot_mentioned=is_mentioned,
-            raw_payload=payload
+            raw_payload=payload,
         )
 
     async def deliver(self, message: OutboundMessage) -> DeliveryResult:
@@ -143,19 +136,28 @@ class TelegramAdapter(ChannelAdapter):
         if message.reply_to_message_id:
             payload["reply_parameters"] = {"message_id": int(message.reply_to_message_id), "allow_sending_without_reply": True}
         if message.buttons:
-            payload["reply_markup"] = {"inline_keyboard": [[
-                {"text": button.label, "url": button.url} if button.type == "url"
-                else {"text": button.label, "callback_data": button.id}
-                for button in row] for row in message.buttons]}
+            payload["reply_markup"] = {
+                "inline_keyboard": [
+                    [
+                        {"text": button.label, "url": button.url}
+                        if button.type == "url"
+                        else {"text": button.label, "callback_data": button.id}
+                        for button in row
+                    ]
+                    for row in message.buttons
+                ]
+            }
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.post(f"{self.base_url}/sendMessage", json=payload)
         data = response.json()
         success = response.status_code == 200 and data.get("ok", False)
-        return DeliveryResult(success=success,
+        return DeliveryResult(
+            success=success,
             provider_ids=[str(data["result"]["message_id"])] if success else [],
             retry_after=data.get("parameters", {}).get("retry_after"),
             permanent=400 <= response.status_code < 500 and response.status_code not in {408, 429},
-            error="" if success else f"Telegram HTTP {response.status_code}")
+            error="" if success else f"Telegram HTTP {response.status_code}",
+        )
 
     async def media_bytes(self, media: ChannelMedia):
         url = await self.get_file_url(media.file_id) if media.file_id else None
@@ -195,12 +197,7 @@ class TelegramAdapter(ChannelAdapter):
                 # Telegram photo caption limit is 1024 chars
                 if len(caption) > 1024:
                     caption = caption[:1020] + "..."
-                payload = {
-                    "chat_id": message.channel_id,
-                    "photo": message.media_url,
-                    "caption": caption,
-                    "parse_mode": "Markdown"
-                }
+                payload = {"chat_id": message.channel_id, "photo": message.media_url, "caption": caption, "parse_mode": "Markdown"}
                 if reply_markup:
                     payload["reply_markup"] = reply_markup
                 resp = await client.post(f"{self.base_url}/sendPhoto", json=payload)
@@ -213,15 +210,11 @@ class TelegramAdapter(ChannelAdapter):
                 full_text = message.text or ""
                 # Telegram message text limit is 4096 chars; chunk if necessary
                 chunk_size = 4000
-                chunks = [full_text[i:i + chunk_size] for i in range(0, max(1, len(full_text)), chunk_size)]
-                
+                chunks = [full_text[i : i + chunk_size] for i in range(0, max(1, len(full_text)), chunk_size)]
+
                 success = True
                 for idx, chunk in enumerate(chunks):
-                    payload = {
-                        "chat_id": message.channel_id,
-                        "text": chunk,
-                        "parse_mode": "Markdown"
-                    }
+                    payload = {"chat_id": message.channel_id, "text": chunk, "parse_mode": "Markdown"}
                     # Attach buttons only to the final chunk
                     if idx == len(chunks) - 1 and reply_markup:
                         payload["reply_markup"] = reply_markup
@@ -241,9 +234,6 @@ class TelegramAdapter(ChannelAdapter):
             return
         async with httpx.AsyncClient(timeout=5.0) as client:
             try:
-                await client.post(f"{self.base_url}/sendChatAction", json={
-                    "chat_id": channel_id,
-                    "action": "typing"
-                })
+                await client.post(f"{self.base_url}/sendChatAction", json={"chat_id": channel_id, "action": "typing"})
             except Exception as e:
                 logger.warning(f"⚠️ [Telegram] Failed to send typing indicator: {e}")

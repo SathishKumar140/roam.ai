@@ -1,6 +1,7 @@
 from src.models.session import ExpenseItem
 from src.agents.tools.expense_tools import simplify_debts
 
+
 def test_simple_three_way_split():
     # Alice pays $90 for Alice, Bob, and Charlie
     expenses = [
@@ -10,19 +11,20 @@ def test_simple_three_way_split():
             paid_by_name="Alice",
             amount=90.0,
             split_between_user_ids=["alice", "bob", "charlie"],
-            description="Seafood Dinner"
+            description="Seafood Dinner",
         )
     ]
 
     transfers = simplify_debts(expenses)
     assert len(transfers) == 2
-    
+
     # Sort by amount or recipient to assert
     transfers_dict = {t["from_name"]: t["amount"] for t in transfers}
     assert transfers_dict["Bob"] == 30.0
     assert transfers_dict["Charlie"] == 30.0
     for t in transfers:
         assert t["to_name"] == "Alice"
+
 
 def test_transitive_debt_simplification():
     # 1. Alice pays $90 for Alice, Bob, Charlie (each owes $30)
@@ -39,7 +41,7 @@ def test_transitive_debt_simplification():
             paid_by_name="Alice",
             amount=90.0,
             split_between_user_ids=["alice", "bob", "charlie"],
-            description="Dinner"
+            description="Dinner",
         ),
         ExpenseItem(
             expense_id="e2",
@@ -47,8 +49,8 @@ def test_transitive_debt_simplification():
             paid_by_name="Bob",
             amount=30.0,
             split_between_user_ids=["alice", "bob"],
-            description="Taxi"
-        )
+            description="Taxi",
+        ),
     ]
 
     transfers = simplify_debts(expenses)
@@ -60,20 +62,16 @@ def test_transitive_debt_simplification():
     for t in transfers:
         assert t["to_name"] == "Alice"
 
+
 def test_consent_based_expense_confirmation():
     import uuid
-    from src.storage.database import db
     from src.agents.tools.expense_tools import record_expense, confirm_expense_split, get_balance_sheet
 
     channel = f"consent_test_{uuid.uuid4().hex[:8]}"
     # 1. Alice logs expense of $90 split with Bob
-    res = record_expense.invoke({
-        "channel_id": channel,
-        "payer_name": "Alice",
-        "amount": 90.0,
-        "description": "Seafood Dinner",
-        "split_members": "Alice, Bob"
-    })
+    res = record_expense.invoke(
+        {"channel_id": channel, "payer_name": "Alice", "amount": 90.0, "description": "Seafood Dinner", "split_members": "Alice, Bob"}
+    )
     assert "PENDING CONSENT" in res or "Pending Consent" in res
     assert "Bob" in res
 
@@ -83,10 +81,7 @@ def test_consent_based_expense_confirmation():
     assert "ACTIVE CONFIRMED DEBTS" not in sheet_before or "No expenses have been finalized yet" in sheet_before
 
     # 3. Bob confirms ("I'm in")
-    conf_res = confirm_expense_split.invoke({
-        "channel_id": channel,
-        "participant_name": "Bob"
-    })
+    conf_res = confirm_expense_split.invoke({"channel_id": channel, "participant_name": "Bob"})
     assert "Bob" in conf_res
     assert "FULLY CONFIRMED" in conf_res or "confirmed" in conf_res.lower()
 

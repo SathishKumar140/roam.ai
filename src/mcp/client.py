@@ -1,4 +1,3 @@
-import asyncio
 import json
 import os
 import subprocess
@@ -12,8 +11,10 @@ from pydantic import create_model, Field
 
 logger = logging.getLogger("roam.ai.mcp")
 
+
 class MCPProcessConnection:
     """Manages a single MCP server running as a local subprocess over stdio."""
+
     def __init__(self, name: str, command: str, args: List[str]):
         self.name = name
         self.command = command
@@ -39,15 +40,14 @@ class MCPProcessConnection:
             text=True,
             bufsize=1,
             cwd=cwd,
-            env=env
+            env=env,
         )
 
         # 1. Initialize
-        self._send_request("initialize", {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {},
-            "clientInfo": {"name": "roamai-mcp-client", "version": "1.0.0"}
-        })
+        self._send_request(
+            "initialize",
+            {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "roamai-mcp-client", "version": "1.0.0"}},
+        )
         init_res = self._read_response()
 
         # 2. Initialized notification
@@ -91,10 +91,7 @@ class MCPProcessConnection:
         formatted_args = json.dumps(arguments, indent=2)
         logger.info(f"\n==================== [MCP CALL: {self.name} -> {tool_name}] ====================\nArguments:\n{formatted_args}")
         with self._request_lock:
-            request_id = self._send_request("tools/call", {
-                "name": tool_name,
-                "arguments": arguments
-            })
+            request_id = self._send_request("tools/call", {"name": tool_name, "arguments": arguments})
             res = self._read_response()
             if res.get("id") != request_id:
                 self.close()
@@ -107,10 +104,14 @@ class MCPProcessConnection:
                 pretty_output = json.dumps(parsed, indent=2)
             except Exception:
                 pretty_output = output_text
-            logger.info(f"\n==================== [MCP RESULT: {self.name} -> {tool_name}] ====================\nPayload ({len(output_text)} chars):\n{pretty_output}\n=======================================================================")
+            logger.info(
+                f"\n==================== [MCP RESULT: {self.name} -> {tool_name}] ====================\nPayload ({len(output_text)} chars):\n{pretty_output}\n======================================================================="
+            )
             return output_text
         out_json = json.dumps(res, indent=2)
-        logger.info(f"\n==================== [MCP RESULT (RAW): {self.name} -> {tool_name}] ====================\n{out_json}\n=======================================================================")
+        logger.info(
+            f"\n==================== [MCP RESULT (RAW): {self.name} -> {tool_name}] ====================\n{out_json}\n======================================================================="
+        )
         return out_json
 
     def close(self):
@@ -127,6 +128,7 @@ class MCPClientManager:
     Unified Multi-Server MCP Client that discovers tools from all registered
     MCP servers and exposes them as native LangChain tools.
     """
+
     def __init__(self, config_path: Optional[str] = None):
         self.config_path = config_path or os.path.join(os.path.dirname(__file__), "config.json")
         self.connections: Dict[str, MCPProcessConnection] = {}
@@ -142,19 +144,11 @@ class MCPClientManager:
 
         for name, srv_conf in config.get("mcpServers", {}).items():
             if srv_conf.get("transport") == "stdio":
-                self.connect_server(
-                    name=name,
-                    command=srv_conf.get("command", "python3"),
-                    args=srv_conf.get("args", [])
-                )
+                self.connect_server(name=name, command=srv_conf.get("command", "python3"), args=srv_conf.get("args", []))
 
         # Ensure the travel_flights MCP server pointing to flight_server.py is connected
         if "travel_flights" not in self.connections:
-            self.connect_server(
-                name="travel_flights",
-                command="python3",
-                args=["-m", "src.mcp.travelassistant.flight_server"]
-            )
+            self.connect_server(name="travel_flights", command="python3", args=["-m", "src.mcp.travelassistant.flight_server"])
 
     def connect_server(self, name: str, command: str, args: List[str]) -> List[StructuredTool]:
         """Connects to an MCP server, retrieves its tools, and wraps them for LangChain."""
@@ -181,14 +175,7 @@ class MCPClientManager:
 
         # Dynamically construct Pydantic schema so LangChain passes arguments accurately
         fields = {}
-        type_mapping = {
-            "string": str,
-            "integer": int,
-            "number": float,
-            "boolean": bool,
-            "array": list,
-            "object": dict
-        }
+        type_mapping = {"string": str, "integer": int, "number": float, "boolean": bool, "array": list, "object": dict}
         required_set = set(schema.get("required", []))
         for prop_name, prop_info in schema.get("properties", {}).items():
             base_type = type_mapping.get(prop_info.get("type", "string"), Any)
@@ -212,10 +199,7 @@ class MCPClientManager:
                 raise
 
         return StructuredTool.from_function(
-            func=_runner,
-            name=tool_name,
-            description=f"[MCP:{conn.name}] {description}",
-            args_schema=args_schema
+            func=_runner, name=tool_name, description=f"[MCP:{conn.name}] {description}", args_schema=args_schema
         )
 
     def get_all_tools(self) -> List[StructuredTool]:
@@ -256,6 +240,6 @@ class MCPClientManager:
         for conn in self.connections.values():
             conn.close()
 
+
 # Global MCP Client Manager instance
 mcp_manager = MCPClientManager()
-

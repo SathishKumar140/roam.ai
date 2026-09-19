@@ -3,26 +3,17 @@ import subprocess
 import sys
 import os
 
+
 def test_travel_mcp_server_stdio():
     """Tests the Travel MCP Server by launching it as a subprocess and sending JSON-RPC messages."""
     server_path = os.path.join(os.path.dirname(__file__), "../src/mcp/servers/travel_mcp_server.py")
     proc = subprocess.Popen(
-        [sys.executable, server_path],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        bufsize=1
+        [sys.executable, server_path], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1
     )
 
     try:
         # 1. Initialize request
-        init_req = json.dumps({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {"protocolVersion": "2024-11-05"}
-        }) + "\n"
+        init_req = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2024-11-05"}}) + "\n"
         proc.stdin.write(init_req)
         proc.stdin.flush()
 
@@ -33,12 +24,7 @@ def test_travel_mcp_server_stdio():
         assert init_resp["result"]["serverInfo"]["name"] == "travel-mcp-server"
 
         # 2. List tools
-        tools_req = json.dumps({
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "tools/list",
-            "params": {}
-        }) + "\n"
+        tools_req = json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}) + "\n"
         proc.stdin.write(tools_req)
         proc.stdin.flush()
 
@@ -52,15 +38,17 @@ def test_travel_mcp_server_stdio():
         assert "generate_itinerary" in tool_names
 
         # 3. Call tool: search_flights
-        call_req = json.dumps({
-            "jsonrpc": "2.0",
-            "id": 3,
-            "method": "tools/call",
-            "params": {
-                "name": "search_flights",
-                "arguments": {"origin": "SIN", "destination": "DPS", "date": "2026-10-15"}
-            }
-        }) + "\n"
+        call_req = (
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {"name": "search_flights", "arguments": {"origin": "SIN", "destination": "DPS", "date": "2026-10-15"}},
+                }
+            )
+            + "\n"
+        )
         proc.stdin.write(call_req)
         proc.stdin.flush()
 

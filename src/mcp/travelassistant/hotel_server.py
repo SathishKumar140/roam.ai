@@ -3,17 +3,19 @@ import sys
 import json
 import os
 import requests
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from urllib.parse import urlencode
 
 try:
     import truststore
+
     truststore.inject_into_ssl()
 except Exception:
     pass
 
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except Exception:
     pass
@@ -31,14 +33,15 @@ TOOLS_DEFINITIONS = [
                 "adults": {"type": "integer", "description": "Number of adult guests (default: 2)"},
                 "currency": {"type": "string", "description": "Currency for prices (default: 'USD')"},
                 "hotel_class": {"type": "array", "items": {"type": "integer"}, "description": "Filter by star rating (e.g. [4, 5])"},
-                "max_results": {"type": "integer", "description": "Max results to return (default: 10)"}
+                "max_results": {"type": "integer", "description": "Max results to return (default: 10)"},
             },
-            "required": ["location", "check_in_date", "check_out_date"]
-        }
+            "required": ["location", "check_in_date", "check_out_date"],
+        },
     }
 ]
 
-from datetime import datetime, timedelta
+from datetime import datetime
+
 
 def ensure_future_date(date_str: Optional[str], fallback_days_ahead: int = 30) -> str:
     """Validate the supplied date without changing the user's travel plans."""
@@ -49,6 +52,7 @@ def ensure_future_date(date_str: Optional[str], fallback_days_ahead: int = 30) -
     if parsed.isoformat() != date_str or parsed < datetime.now().date():
         raise ValueError("Travel date is past or invalid; ask the user to confirm a future date")
     return date_str
+
 
 def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
     loc = arguments.get("location", "")
@@ -64,8 +68,11 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
     if type(adults) is not int or adults < 1:
         return {"error": "adults must be a positive integer", "properties": []}
     search_metadata = {
-        "location": loc, "check_in_date": in_date, "check_out_date": out_date,
-        "currency": currency, "adults": adults,
+        "location": loc,
+        "check_in_date": in_date,
+        "check_out_date": out_date,
+        "currency": currency,
+        "adults": adults,
     }
     api_key = os.getenv("SERPAPI_KEY")
 
@@ -88,15 +95,18 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                     properties = []
                     for hotel in props:
                         public_link = hotel.get("link")
-                        properties.append({
-                            **{key: value for key, value in hotel.items() if key != "serpapi_property_details_link"},
-                            "link": public_link or "https://www.google.com/travel/hotels?" + urlencode({"q": f"{hotel.get('name', '')} {loc}"}),
-                            "link_type": "hotel_website" if public_link else "public_hotel_search",
-                        })
+                        properties.append(
+                            {
+                                **{key: value for key, value in hotel.items() if key != "serpapi_property_details_link"},
+                                "link": public_link
+                                or "https://www.google.com/travel/hotels?" + urlencode({"q": f"{hotel.get('name', '')} {loc}"}),
+                                "link_type": "hotel_website" if public_link else "public_hotel_search",
+                            }
+                        )
                     return {
                         "source": "mcp_travelassistant_live_google_hotels",
                         "search_metadata": search_metadata,
-                        "properties": properties
+                        "properties": properties,
                     }
         except Exception:
             pass
@@ -104,6 +114,7 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
     # Live search fallback (zero mock data)
     try:
         from duckduckgo_search import DDGS
+
         q = f"best hotels hostels resorts to stay in {loc}"
         ddg_res = list(DDGS().text(q, max_results=4))
         if ddg_res:
@@ -112,29 +123,23 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                     "name": r.get("title", f"Accommodations in {loc}"),
                     "rate_per_night": {"extracted_lowest": "Live rate"},
                     "description": r.get("body", ""),
-                    "link": r.get("href", "https://google.com/travel/hotels")
+                    "link": r.get("href", "https://google.com/travel/hotels"),
                 }
                 for r in ddg_res
             ]
-            return {
-                "source": "mcp_travelassistant_live_hotel_search",
-                "search_metadata": search_metadata,
-                "properties": properties
-            }
+            return {"source": "mcp_travelassistant_live_hotel_search", "search_metadata": search_metadata, "properties": properties}
     except Exception as e:
         sys.stderr.write(f"⚠️ Live hotel search fallback failed: {e}\n")
 
-    return {
-        "source": "mcp_travelassistant_hotel_server",
-        "search_metadata": search_metadata,
-        "properties": []
-    }
+    return {"source": "mcp_travelassistant_hotel_server", "search_metadata": search_metadata, "properties": []}
+
 
 def handle_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     if name == "search_hotels":
         res = search_hotels_handler(arguments)
         return {"content": [{"type": "text", "text": json.dumps(res, indent=2)}]}
     return {"isError": True, "content": [{"type": "text", "text": f"Unknown tool: {name}"}]}
+
 
 def run_server():
     for line in sys.stdin:
@@ -157,8 +162,8 @@ def run_server():
                 "result": {
                     "protocolVersion": "2024-11-05",
                     "serverInfo": {"name": "mcp-travelassistant-hotels", "version": "1.0.0"},
-                    "capabilities": {"tools": {}}
-                }
+                    "capabilities": {"tools": {}},
+                },
             }
             sys.stdout.write(json.dumps(resp) + "\n")
             sys.stdout.flush()
@@ -173,6 +178,7 @@ def run_server():
             resp = {"jsonrpc": "2.0", "id": req_id, "result": call_res}
             sys.stdout.write(json.dumps(resp) + "\n")
             sys.stdout.flush()
+
 
 if __name__ == "__main__":
     run_server()

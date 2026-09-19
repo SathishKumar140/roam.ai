@@ -1,6 +1,7 @@
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Optional, Dict, Literal
 from pydantic import BaseModel, Field
 from datetime import datetime
+
 
 class TripParticipant(BaseModel):
     user_id: str
@@ -8,11 +9,13 @@ class TripParticipant(BaseModel):
     confirmed: bool = False
     preferences: List[str] = Field(default_factory=list)
 
+
 class ItineraryDay(BaseModel):
     day: int
     date: str
     activities: List[str] = Field(default_factory=list)
     hotel: Optional[Dict[str, str]] = None
+
 
 class ExpenseItem(BaseModel):
     expense_id: str
@@ -26,6 +29,7 @@ class ExpenseItem(BaseModel):
     status: Literal["pending_confirmation", "confirmed"] = "pending_confirmation"
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
+
 class DebtTransfer(BaseModel):
     debtor_id: str
     debtor_name: str
@@ -33,6 +37,7 @@ class DebtTransfer(BaseModel):
     creditor_name: str
     amount: float
     currency: str = "USD"
+
 
 class ActiveTripSession(BaseModel):
     session_id: str

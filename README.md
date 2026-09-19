@@ -8,6 +8,10 @@
 
 ## 🌟 Key Features
 
+For repeatable prompt evaluation, see [LLM-judged use cases](evals/README.md).
+Write natural-language scenarios, run `.venv/bin/python -m evals.run`, and review
+criterion scores, evidence-backed findings and coverage gaps in generated reports.
+
 1. **Selective participation**: A read-only observer identifies topics and coordination needs.
    Deterministic rules gate offers, explicit requests, accepted help, and clear follow-ups.
 2. **Scoped memory**: Conversation identities include platform, account, and chat. Topics,

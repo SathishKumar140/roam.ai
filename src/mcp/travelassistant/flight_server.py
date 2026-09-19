@@ -3,13 +3,13 @@ import sys
 import json
 import os
 import requests
-import logging
 import re
 from typing import Dict, Any, Optional
 
 # Inject system truststore for SSL verification through enterprise proxies (e.g. Zscaler)
 try:
     import truststore
+
     truststore.inject_into_ssl()
 except Exception:
     pass
@@ -17,6 +17,7 @@ except Exception:
 # Load environment variables
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except Exception:
     pass
@@ -66,10 +67,11 @@ CITY_TO_IATA = {
     "HA GIANG": "HAN",
     "GIANG LOOP": "HAN",
     "PHUKET": "HKT",
-    "HKT": "HKT"
+    "HKT": "HKT",
 }
 
 from datetime import datetime, timedelta
+
 
 def ensure_future_date(date_str: Optional[str], fallback_days_ahead: int = 30) -> str:
     """Validate the supplied date without changing the user's travel plans."""
@@ -80,6 +82,7 @@ def ensure_future_date(date_str: Optional[str], fallback_days_ahead: int = 30) -
     if parsed.isoformat() != date_str or parsed < datetime.now().date():
         raise ValueError("Travel date is past or invalid; ask the user to confirm a future date")
     return date_str
+
 
 TOOLS_DEFINITIONS = [
     {
@@ -96,10 +99,10 @@ TOOLS_DEFINITIONS = [
                 "date": {"type": "string", "description": "Alias for outbound_date"},
                 "return_date": {"type": "string", "description": "Return date in YYYY-MM-DD format (optional)"},
                 "adults": {"type": "integer", "description": "Number of adult travelers (default: 1); use the confirmed trip participants"},
-                "currency": {"type": "string", "description": "Currency code (default: 'USD')"}
+                "currency": {"type": "string", "description": "Currency code (default: 'USD')"},
             },
-            "required": []
-        }
+            "required": [],
+        },
     },
     {
         "name": "search_cheapest_flights_in_month",
@@ -114,12 +117,13 @@ TOOLS_DEFINITIONS = [
                 "adults": {"type": "integer", "description": "Confirmed number of adult travelers (default: 1)"},
                 "origin": {"type": "string", "description": "Alias for departure_id"},
                 "destination": {"type": "string", "description": "Alias for arrival_id"},
-                "currency": {"type": "string", "description": "Currency code (default: 'USD')"}
+                "currency": {"type": "string", "description": "Currency code (default: 'USD')"},
             },
-            "required": []
-        }
-    }
+            "required": [],
+        },
+    },
 ]
+
 
 def normalize_airport(val: str) -> str:
     cleaned = (val or "").strip().upper()
@@ -130,6 +134,7 @@ def normalize_airport(val: str) -> str:
         return match[2]
     return cleaned
 
+
 def parse_serpapi_flights(raw_list: list) -> list:
     results = []
     for item in raw_list[:6]:
@@ -138,24 +143,27 @@ def parse_serpapi_flights(raw_list: list) -> list:
             continue
         first_leg = legs[0]
         last_leg = legs[-1]
-        
+
         airline = first_leg.get("airline", "Airline")
         flight_num = first_leg.get("flight_number", "")
         dep_time = first_leg.get("departure_airport", {}).get("time", "")
         arr_time = last_leg.get("arrival_airport", {}).get("time", "")
         price = item.get("price")
         total_duration = item.get("total_duration")
-        
-        results.append({
-            "flight": flight_num or airline,
-            "airline": airline,
-            "departure": dep_time,
-            "arrival": arr_time,
-            "duration_minutes": total_duration,
-            "price": price,
-            "stops": len(legs) - 1
-        })
+
+        results.append(
+            {
+                "flight": flight_num or airline,
+                "airline": airline,
+                "departure": dep_time,
+                "arrival": arr_time,
+                "duration_minutes": total_duration,
+                "price": price,
+                "stops": len(legs) - 1,
+            }
+        )
     return results
+
 
 def search_flights_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
     dep_raw = arguments.get("departure_id") or arguments.get("origin")
@@ -193,18 +201,18 @@ def search_flights_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                 "type": 1 if ret_date else 2,
                 "currency": currency,
                 "adults": adults,
-                "hl": "en"
+                "hl": "en",
             }
             if ret_date:
                 params["return_date"] = ret_date
-            
+
             resp = requests.get("https://serpapi.com/search", params=params, timeout=15)
             if resp.status_code == 200:
                 data = resp.json()
                 best = parse_serpapi_flights(data.get("best_flights", []))
                 other = parse_serpapi_flights(data.get("other_flights", []))
                 all_flights = best or other
-                
+
                 sys.stderr.write(f"✅ [Live Google Flights] Successfully fetched {len(all_flights)} live options from Google Flights.\n")
                 sys.stderr.flush()
                 return {
@@ -218,7 +226,7 @@ def search_flights_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                     "price_insights": data.get("price_insights", {}),
                     "best_flights": best,
                     "other_flights": other,
-                    "flights": all_flights
+                    "flights": all_flights,
                 }
             else:
                 sys.stderr.write(f"⚠️ [Live Google Flights] SerpApi HTTP {resp.status_code}: {resp.text[:150]}\n")
@@ -230,6 +238,7 @@ def search_flights_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
     # Live search fallback (zero mock data)
     try:
         from duckduckgo_search import DDGS
+
         q = f"flights from {dep} to {arr} {date}"
         ddg_res = list(DDGS().text(q, max_results=3))
         if ddg_res:
@@ -240,7 +249,7 @@ def search_flights_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                     "dep": "See live link",
                     "arr": "See live link",
                     "price": "Live market rate",
-                    "link": r.get("href", "")
+                    "link": r.get("href", ""),
                 }
                 for r in ddg_res
             ]
@@ -250,7 +259,7 @@ def search_flights_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                 "date": date,
                 "currency": currency,
                 "best_flights": flights,
-                "flights": flights
+                "flights": flights,
             }
     except Exception as e:
         sys.stderr.write(f"⚠️ Live flight search fallback failed: {e}\n")
@@ -262,8 +271,9 @@ def search_flights_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
         "currency": currency,
         "best_flights": [],
         "flights": [],
-        "message": f"No live flights found for route {dep} -> {arr} on {date}. Please verify airport codes or try alternative dates."
+        "message": f"No live flights found for route {dep} -> {arr} on {date}. Please verify airport codes or try alternative dates.",
     }
+
 
 def search_cheapest_flights_in_month_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
     import calendar
@@ -297,7 +307,7 @@ def search_cheapest_flights_in_month_handler(arguments: Dict[str, Any]) -> Dict[
     target_year, target_month = parsed_month.year, parsed_month.month
 
     _, num_days = calendar.monthrange(target_year, target_month)
-    
+
     first_day = now.day if (target_year, target_month) == (now.year, now.month) else 1
     start_days = sorted({first_day + (num_days - first_day) * index // 3 for index in range(4)})
 
@@ -307,7 +317,9 @@ def search_cheapest_flights_in_month_handler(arguments: Dict[str, Any]) -> Dict[
         ret_d = out_d + timedelta(days=duration)
         candidate_windows.append((out_d.strftime("%Y-%m-%d"), ret_d.strftime("%Y-%m-%d")))
 
-    sys.stderr.write(f"🔍 [Flight MCP] Scanning {len(candidate_windows)} travel windows across {target_year}-{target_month:02d} for {dep}->{arr} ({duration} days)...\n")
+    sys.stderr.write(
+        f"🔍 [Flight MCP] Scanning {len(candidate_windows)} travel windows across {target_year}-{target_month:02d} for {dep}->{arr} ({duration} days)...\n"
+    )
     sys.stderr.flush()
 
     def check_window(window):
@@ -325,7 +337,7 @@ def search_cheapest_flights_in_month_handler(arguments: Dict[str, Any]) -> Dict[
                 "type": 1,
                 "currency": currency,
                 "adults": adults,
-                "hl": "en"
+                "hl": "en",
             }
             resp = requests.get("https://serpapi.com/search", params=params, timeout=12)
             if resp.status_code == 200:
@@ -339,7 +351,7 @@ def search_cheapest_flights_in_month_handler(arguments: Dict[str, Any]) -> Dict[
                     "return_date": ret_date,
                     "lowest_price": lowest,
                     "flights": all_f,
-                    "top_flight": all_f[0] if all_f else None
+                    "top_flight": all_f[0] if all_f else None,
                 }
         except Exception as e:
             sys.stderr.write(f"⚠️ [Flight MCP] Window {dep_date}->{ret_date} failed: {e}\n")
@@ -352,20 +364,22 @@ def search_cheapest_flights_in_month_handler(arguments: Dict[str, Any]) -> Dict[
             windows_results = [r for r in ex.map(check_window, candidate_windows) if r and r.get("lowest_price")]
 
     if windows_results:
-        windows_results.sort(key=lambda x: (x["lowest_price"] or 999999))
+        windows_results.sort(key=lambda x: x["lowest_price"] or 999999)
         best_window = windows_results[0]
-        
+
         summary_windows = [
             {
                 "dates": f"{w['departure_date']} to {w['return_date']}",
                 "lowest_price": f"{currency} {w['lowest_price']}",
                 "airline": w["top_flight"]["airline"] if w.get("top_flight") else "Unknown",
-                "is_cheapest": (w == best_window)
+                "is_cheapest": (w == best_window),
             }
             for w in windows_results
         ]
 
-        sys.stderr.write(f"✅ [Flight MCP] Found cheapest travel window: {best_window['departure_date']} to {best_window['return_date']} at {currency} {best_window['lowest_price']}\n")
+        sys.stderr.write(
+            f"✅ [Flight MCP] Found cheapest travel window: {best_window['departure_date']} to {best_window['return_date']} at {currency} {best_window['lowest_price']}\n"
+        )
         sys.stderr.flush()
 
         return {
@@ -379,10 +393,10 @@ def search_cheapest_flights_in_month_handler(arguments: Dict[str, Any]) -> Dict[
                 "departure_date": best_window["departure_date"],
                 "return_date": best_window["return_date"],
                 "lowest_price": best_window["lowest_price"],
-                "currency": currency
+                "currency": currency,
             },
             "tested_date_windows": summary_windows,
-            "best_flights_for_recommended_dates": best_window["flights"]
+            "best_flights_for_recommended_dates": best_window["flights"],
         }
 
     return {
@@ -395,8 +409,9 @@ def search_cheapest_flights_in_month_handler(arguments: Dict[str, Any]) -> Dict[
         "message": "No live fares were returned; no cheapest dates or price can be recommended.",
         "recommended_cheapest_dates": None,
         "tested_date_windows": [],
-        "best_flights_for_recommended_dates": []
+        "best_flights_for_recommended_dates": [],
     }
+
 
 def handle_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     if name == "search_flights":
@@ -410,6 +425,7 @@ def handle_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         res = search_cheapest_flights_in_month_handler(arguments)
         return {"content": [{"type": "text", "text": json.dumps(res, indent=2)}]}
     return {"isError": True, "content": [{"type": "text", "text": f"Unknown tool: {name}"}]}
+
 
 def run_server():
     for line in sys.stdin:
@@ -432,8 +448,8 @@ def run_server():
                 "result": {
                     "protocolVersion": "2024-11-05",
                     "serverInfo": {"name": "mcp-travelassistant-flights", "version": "1.0.0"},
-                    "capabilities": {"tools": {}}
-                }
+                    "capabilities": {"tools": {}},
+                },
             }
             sys.stdout.write(json.dumps(resp) + "\n")
             sys.stdout.flush()
@@ -448,6 +464,7 @@ def run_server():
             resp = {"jsonrpc": "2.0", "id": req_id, "result": call_res}
             sys.stdout.write(json.dumps(resp) + "\n")
             sys.stdout.flush()
+
 
 if __name__ == "__main__":
     run_server()

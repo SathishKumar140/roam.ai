@@ -5,12 +5,14 @@ from dotenv import load_dotenv
 
 try:
     import truststore
+
     truststore.inject_into_ssl()
 except Exception:
     pass
 
 # Load environment variables
 load_dotenv()
+
 
 class Settings(BaseModel):
     # Server
@@ -20,7 +22,7 @@ class Settings(BaseModel):
 
     # LLM Settings
     DEFAULT_LLM_PROVIDER: str = os.getenv("DEFAULT_LLM_PROVIDER", "gemini")
-    
+
     # Gemini
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
@@ -59,6 +61,7 @@ class Settings(BaseModel):
     # Search & Live APIs (Google Flights, Hotels & Events via SerpApi)
     SERPAPI_KEY: Optional[str] = os.getenv("SERPAPI_KEY") or os.getenv("SERP_API_KEY")
 
+
 settings = Settings()
 
 
@@ -68,26 +71,20 @@ def get_llm(provider: Optional[str] = None, *, allow_fake: bool = True):
     Supports Google Gemini (free-tier), Groq, and OpenAI.
     """
     prov = provider or settings.DEFAULT_LLM_PROVIDER
-    
+
     if settings.GEMINI_API_KEY and (prov == "gemini" or not settings.OPENAI_API_KEY):
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
-            return ChatGoogleGenerativeAI(
-                model=settings.GEMINI_MODEL,
-                google_api_key=settings.GEMINI_API_KEY,
-                temperature=0.4
-            )
+
+            return ChatGoogleGenerativeAI(model=settings.GEMINI_MODEL, google_api_key=settings.GEMINI_API_KEY, temperature=0.4)
         except Exception:
             pass
 
     if settings.OPENAI_API_KEY and (prov == "openai" or not settings.GEMINI_API_KEY):
         try:
             from langchain_openai import ChatOpenAI
-            return ChatOpenAI(
-                model=settings.OPENAI_MODEL,
-                api_key=settings.OPENAI_API_KEY,
-                temperature=0.4
-            )
+
+            return ChatOpenAI(model=settings.OPENAI_MODEL, api_key=settings.OPENAI_API_KEY, temperature=0.4)
         except Exception:
             pass
 
@@ -97,6 +94,7 @@ def get_llm(provider: Optional[str] = None, *, allow_fake: bool = True):
     # Fallback to standard chat interface or dummy mock for local testing
     try:
         from langchain_community.chat_models import FakeListChatModel
+
         return FakeListChatModel(responses=["Hello! I am your buddy to plan and assist you in travel and stay or outing."])
     except Exception:
         return None

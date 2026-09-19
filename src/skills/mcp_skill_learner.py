@@ -1,10 +1,9 @@
 import json
 import re
 from pathlib import Path
-from typing import List, Dict, Any
 from langchain_core.tools import tool
 from src.mcp.client import mcp_manager
-from src.storage.database import db
+
 
 def create_mcp_skill_folder(server_name: str, new_tools: list) -> Path:
     """
@@ -12,15 +11,15 @@ def create_mcp_skill_folder(server_name: str, new_tools: list) -> Path:
     """
     clean_name = re.sub(r"[^a-z0-9-]", "-", f"mcp-{server_name.lower()}").strip("-")
     clean_name = re.sub(r"-+", "-", clean_name)[:64]
-    
+
     skill_dir = Path("skills/meta-skills") / clean_name
     skill_dir.mkdir(parents=True, exist_ok=True)
     skill_md = skill_dir / "SKILL.md"
-    
+
     tool_names = [t.name for t in new_tools]
     tool_lines = "\n".join([f"  - {t}" for t in tool_names])
     tool_descriptions = "\n".join([f"- **`{t.name}`**: {t.description}" for t in new_tools])
-    
+
     content = f"""---
 name: {clean_name}
 description: Dynamically learned capabilities from MCP server '{server_name}'
@@ -45,6 +44,7 @@ Invoke the respective tools above when a user request matches this server's doma
 """
     skill_md.write_text(content, encoding="utf-8")
     return skill_md
+
 
 @tool
 def connect_external_mcp_server(server_name: str, command: str, args_json: str = "[]") -> str:
@@ -72,6 +72,7 @@ def connect_external_mcp_server(server_name: str, command: str, args_json: str =
     except Exception as e:
         return f"❌ Failed to connect to MCP Server '{server_name}': {str(e)}"
 
+
 @tool
 def list_connected_mcp_skills() -> str:
     """
@@ -86,6 +87,7 @@ def list_connected_mcp_skills() -> str:
         lines.append(f"• **`{t.name}`**: {t.description}")
     return "\n".join(lines)
 
+
 @tool
 def disconnect_mcp_server(server_name: str) -> str:
     """
@@ -96,5 +98,6 @@ def disconnect_mcp_server(server_name: str) -> str:
         del mcp_manager.connections[server_name]
         return f"Disconnected MCP server '{server_name}'."
     return f"MCP server '{server_name}' was not active."
+
 
 skill_learner_tools = [connect_external_mcp_server, list_connected_mcp_skills, disconnect_mcp_server]

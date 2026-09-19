@@ -1,6 +1,6 @@
 from typing import List, Dict, Any, Optional
-import re
-from src.models.channel import InteractiveButton, PlatformType
+from src.models.channel import InteractiveButton
+
 
 def get_channel_presentation_prompt(platform: str) -> str:
     """
@@ -135,9 +135,7 @@ Render responses in rich standard Markdown with headers (#, ##, ###), tables, co
 
 
 def build_channel_buttons(
-    platform: str,
-    output_text: str,
-    tools_executed: Optional[List[Dict[str, Any]]] = None
+    platform: str, output_text: str, tools_executed: Optional[List[Dict[str, Any]]] = None
 ) -> List[List[InteractiveButton]]:
     """
     Generates channel-adaptive interactive buttons tailored specifically
@@ -151,7 +149,9 @@ def build_channel_buttons(
     is_trip_proposal = any(k in lower_text for k in ["trip proposal", "recommended flight", "recommended stay", "itinerary highlights"])
     is_cheapest_dates = any(k in lower_text for k in ["cheapest travel window", "month fare comparison", "cheapest dates"])
     is_group_consensus = any(k in lower_text for k in ["group consensus card", "winning recommendation", "winning spot"])
-    is_expense = any(k in lower_text for k in ["expense settlement sheet", "logged expense", "settlement breakdown", "balance sheet", "who owes what"])
+    is_expense = any(
+        k in lower_text for k in ["expense settlement sheet", "logged expense", "settlement breakdown", "balance sheet", "who owes what"]
+    )
     is_venue = any(k in lower_text for k in ["scout & venue analysis", "scout analysis", "vibe", "facade"])
     is_departure = any(k in lower_text for k in ["departure poll", "are you ready", "confirm departure", "wake-up"])
 
@@ -167,57 +167,71 @@ def build_channel_buttons(
                     flight_search_url = f"https://www.google.com/travel/flights?q=flights+from+SIN+to+{args['destination']}"
                     break
 
-            buttons.append([
-                InteractiveButton(id="search_flights_btn", label="✈️ Google Flights ↗", type="url", url=flight_search_url),
-                InteractiveButton(id="confirm_proposal", label="✅ Confirm Plan", type="callback")
-            ])
-            buttons.append([
-                InteractiveButton(id="modify_plan", label="🔄 Adjust Dates / Budget", type="callback"),
-                InteractiveButton(id="vote_trip", label="🗳️ Create Group Poll", type="callback")
-            ])
+            buttons.append(
+                [
+                    InteractiveButton(id="search_flights_btn", label="✈️ Google Flights ↗", type="url", url=flight_search_url),
+                    InteractiveButton(id="confirm_proposal", label="✅ Confirm Plan", type="callback"),
+                ]
+            )
+            buttons.append(
+                [
+                    InteractiveButton(id="modify_plan", label="🔄 Adjust Dates / Budget", type="callback"),
+                    InteractiveButton(id="vote_trip", label="🗳️ Create Group Poll", type="callback"),
+                ]
+            )
             return buttons
 
         if is_group_consensus:
-            buttons.append([
-                InteractiveButton(id="open_maps_consensus", label="📍 Open in Maps ↗", type="url", url="https://maps.google.com"),
-                InteractiveButton(id="vote_venue_yes", label="👍 Count Me In!", type="callback")
-            ])
-            buttons.append([
-                InteractiveButton(id="suggest_alternative", label="🔄 Suggest Another", type="callback")
-            ])
+            buttons.append(
+                [
+                    InteractiveButton(id="open_maps_consensus", label="📍 Open in Maps ↗", type="url", url="https://maps.google.com"),
+                    InteractiveButton(id="vote_venue_yes", label="👍 Count Me In!", type="callback"),
+                ]
+            )
+            buttons.append([InteractiveButton(id="suggest_alternative", label="🔄 Suggest Another", type="callback")])
             return buttons
 
         if is_expense:
-            buttons.append([
-                InteractiveButton(id="confirm_expense_split", label="👍 I'm In / Confirm", type="callback"),
-                InteractiveButton(id="opt_out_expense", label="❌ Not Me / Opt Out", type="callback")
-            ])
-            buttons.append([
-                InteractiveButton(id="view_ledger", label="📊 View Ledger", type="callback"),
-                InteractiveButton(id="settle_expenses", label="💳 Settle Balances", type="callback")
-            ])
+            buttons.append(
+                [
+                    InteractiveButton(id="confirm_expense_split", label="👍 I'm In / Confirm", type="callback"),
+                    InteractiveButton(id="opt_out_expense", label="❌ Not Me / Opt Out", type="callback"),
+                ]
+            )
+            buttons.append(
+                [
+                    InteractiveButton(id="view_ledger", label="📊 View Ledger", type="callback"),
+                    InteractiveButton(id="settle_expenses", label="💳 Settle Balances", type="callback"),
+                ]
+            )
             return buttons
 
         if is_venue:
-            buttons.append([
-                InteractiveButton(id="open_maps_venue", label="📍 View on Google Maps ↗", type="url", url="https://maps.google.com"),
-                InteractiveButton(id="add_to_itinerary", label="➕ Add to Itinerary", type="callback")
-            ])
+            buttons.append(
+                [
+                    InteractiveButton(id="open_maps_venue", label="📍 View on Google Maps ↗", type="url", url="https://maps.google.com"),
+                    InteractiveButton(id="add_to_itinerary", label="➕ Add to Itinerary", type="callback"),
+                ]
+            )
             return buttons
 
         if is_departure:
-            buttons.append([
-                InteractiveButton(id="vote_ready", label="👍 Ready & On My Way!", type="callback"),
-                InteractiveButton(id="vote_delayed", label="⏰ Running Late", type="callback")
-            ])
+            buttons.append(
+                [
+                    InteractiveButton(id="vote_ready", label="👍 Ready & On My Way!", type="callback"),
+                    InteractiveButton(id="vote_delayed", label="⏰ Running Late", type="callback"),
+                ]
+            )
             return buttons
 
         # Default contextual buttons for travel queries
         if any(w in lower_text for w in ["flight", "hotel", "travel", "singapore", "vietnam", "bali"]):
-            buttons.append([
-                InteractiveButton(id="explore_more", label="🧭 Explore More Options", type="callback"),
-                InteractiveButton(id="currency_rates", label="💱 Currency Rates", type="callback")
-            ])
+            buttons.append(
+                [
+                    InteractiveButton(id="explore_more", label="🧭 Explore More Options", type="callback"),
+                    InteractiveButton(id="currency_rates", label="💱 Currency Rates", type="callback"),
+                ]
+            )
             return buttons
 
         return []
@@ -225,21 +239,27 @@ def build_channel_buttons(
     elif p == "whatsapp":
         # WhatsApp limits: Max 3 buttons, labels <= 20 chars
         if is_trip_proposal or is_cheapest_dates:
-            return [[
-                InteractiveButton(id="confirm", label="Confirm Plan", type="callback"),
-                InteractiveButton(id="adjust", label="Adjust Dates", type="callback"),
-                InteractiveButton(id="poll", label="Group Poll", type="callback")
-            ]]
+            return [
+                [
+                    InteractiveButton(id="confirm", label="Confirm Plan", type="callback"),
+                    InteractiveButton(id="adjust", label="Adjust Dates", type="callback"),
+                    InteractiveButton(id="poll", label="Group Poll", type="callback"),
+                ]
+            ]
         if is_expense:
-            return [[
-                InteractiveButton(id="settle", label="Settle Debt", type="callback"),
-                InteractiveButton(id="balance", label="View Balance", type="callback")
-            ]]
+            return [
+                [
+                    InteractiveButton(id="settle", label="Settle Debt", type="callback"),
+                    InteractiveButton(id="balance", label="View Balance", type="callback"),
+                ]
+            ]
         if is_venue:
-            return [[
-                InteractiveButton(id="add_stop", label="Add to Trip", type="callback"),
-                InteractiveButton(id="other_venue", label="Next Option", type="callback")
-            ]]
+            return [
+                [
+                    InteractiveButton(id="add_stop", label="Add to Trip", type="callback"),
+                    InteractiveButton(id="other_venue", label="Next Option", type="callback"),
+                ]
+            ]
         return []
 
     else:
@@ -247,6 +267,6 @@ def build_channel_buttons(
         if is_trip_proposal or is_cheapest_dates:
             return [
                 [InteractiveButton(id="confirm_booking", label="✅ Confirm Proposal", type="callback")],
-                [InteractiveButton(id="modify_plan", label="🔄 Adjust Preferences", type="callback")]
+                [InteractiveButton(id="modify_plan", label="🔄 Adjust Preferences", type="callback")],
             ]
         return []

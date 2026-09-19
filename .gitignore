@@ -18,6 +18,7 @@ hotels/
 finance/
 events/
 geocoded_locations/
+evals/reports/
 
 # Virtual Environments
 venv/

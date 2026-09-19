@@ -3,11 +3,10 @@ Skills Loader module conforming to the LangChain DeepAgents and Agent Skills Spe
 Handles progressive disclosure, YAML frontmatter parsing, validation, and subagent skill isolation.
 """
 
-import os
 import re
 import yaml
 from pathlib import Path
-from typing import Dict, List, Optional, Any, TypedDict
+from typing import Dict, List, Optional, TypedDict
 from langchain_core.tools import tool
 
 MAX_SKILL_NAME_LENGTH = 64
@@ -95,7 +94,7 @@ def parse_skill_md(file_path: Path) -> Optional[SkillMetadata]:
         license=fm.get("license"),
         compatibility=fm.get("compatibility"),
         metadata={str(k): str(v) for k, v in metadata.items()},
-        allowed_tools=[str(t) for t in allowed_tools]
+        allowed_tools=[str(t) for t in allowed_tools],
     )
 
 
@@ -185,6 +184,7 @@ Skills follow a **progressive disclosure** pattern: you see their summary below,
         """
         Creates a LangChain tool allowing agents to view full skill workflows on demand.
         """
+
         @tool
         def read_skill_instructions(skill_name: str) -> str:
             """

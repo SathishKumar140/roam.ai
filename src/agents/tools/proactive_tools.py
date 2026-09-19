@@ -1,6 +1,7 @@
 from langchain_core.tools import tool
 from src.storage.database import db
-from src.models.session import ActiveTripSession, TripParticipant
+from src.models.session import ActiveTripSession
+
 
 @tool
 def schedule_trip_departure_checkin(channel_id: str, destination: str, trip_date: str) -> str:
@@ -11,19 +12,16 @@ def schedule_trip_departure_checkin(channel_id: str, destination: str, trip_date
     if not trip:
         session_id = f"trip_{channel_id}"
         trip = ActiveTripSession(
-            session_id=session_id,
-            channel_id=channel_id,
-            status="planning",
-            destination=destination,
-            start_date=trip_date
+            session_id=session_id, channel_id=channel_id, status="planning", destination=destination, start_date=trip_date
         )
     else:
         trip.destination = destination
         trip.start_date = trip_date
         trip.status = "planning"
-    
+
     db.save_active_trip(trip)
     return f"Scheduled wake-up concierge for trip to {destination} on {trip_date}. The companion will autonomously check in on departure morning!"
+
 
 @tool
 def confirm_trip_departure(channel_id: str, user_name: str) -> str:
@@ -40,6 +38,7 @@ def confirm_trip_departure(channel_id: str, user_name: str) -> str:
     db.save_active_trip(trip)
     return f"✅ Trip departure confirmed by {user_name}! Status updated to 'in_progress'. Have an incredible journey to {trip.destination or 'your destination'}! Let me know if you need to log any expenses or find great food along the way."
 
+
 @tool
 def get_trip_status(channel_id: str) -> str:
     """
@@ -50,5 +49,6 @@ def get_trip_status(channel_id: str) -> str:
         return "No active trip currently on record for this group."
 
     return f"Trip to {trip.destination or 'TBD'} | Status: {trip.status.upper()} | Dates: {trip.start_date or 'TBD'} to {trip.end_date or 'TBD'}."
+
 
 proactive_tools = [schedule_trip_departure_checkin, confirm_trip_departure, get_trip_status]

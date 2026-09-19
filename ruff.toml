@@ -1,0 +1,10 @@
+line-length = 140
+target-version = "py312"
+extend-exclude = ["evals/reports", ".venv"]
+
+[format]
+quote-style = "double"
+
+[lint]
+select = ["E", "F"]
+ignore = ["E501"]

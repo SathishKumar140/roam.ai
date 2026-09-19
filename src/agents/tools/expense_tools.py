@@ -1,9 +1,9 @@
-import json
 import uuid
 from typing import List, Dict, Any, Optional
 from langchain_core.tools import tool
 from src.storage.database import db
 from src.models.session import ExpenseItem, ActiveTripSession
+
 
 def simplify_debts(expenses: List[ExpenseItem]) -> List[Dict[str, Any]]:
     """
@@ -25,7 +25,7 @@ def simplify_debts(expenses: List[ExpenseItem]) -> List[Dict[str, Any]]:
         net_balances[exp.paid_by_user_id] = net_balances.get(exp.paid_by_user_id, 0.0) + exp.amount
 
         # Debit the consumers
-        for user_id in (exp.split_between_user_ids or [exp.paid_by_user_id]):
+        for user_id in exp.split_between_user_ids or [exp.paid_by_user_id]:
             net_balances[user_id] = net_balances.get(user_id, 0.0) - share_per_person
             if user_id not in name_lookup:
                 name_lookup[user_id] = user_id.title()
@@ -54,13 +54,15 @@ def simplify_debts(expenses: List[ExpenseItem]) -> List[Dict[str, Any]]:
 
         transfer_amt = round(min(debtor["balance"], creditor["balance"]), 2)
         if transfer_amt > 0:
-            transfers.append({
-                "from_name": debtor["name"],
-                "from_id": debtor["user_id"],
-                "to_name": creditor["name"],
-                "to_id": creditor["user_id"],
-                "amount": transfer_amt
-            })
+            transfers.append(
+                {
+                    "from_name": debtor["name"],
+                    "from_id": debtor["user_id"],
+                    "to_name": creditor["name"],
+                    "to_id": creditor["user_id"],
+                    "amount": transfer_amt,
+                }
+            )
 
         debtor["balance"] -= transfer_amt
         creditor["balance"] -= transfer_amt
@@ -71,6 +73,7 @@ def simplify_debts(expenses: List[ExpenseItem]) -> List[Dict[str, Any]]:
             c_idx += 1
 
     return transfers
+
 
 @tool
 def record_expense(channel_id: str, payer_name: str, amount: float, description: str, split_members: str = "group") -> str:
@@ -113,7 +116,7 @@ def record_expense(channel_id: str, payer_name: str, amount: float, description:
         description=description,
         split_between_user_ids=split_user_ids,
         confirmed_by_user_ids=confirmed,
-        status=status
+        status=status,
     )
     db.add_expense(session_id, expense)
 
@@ -137,6 +140,7 @@ def record_expense(channel_id: str, payer_name: str, amount: float, description:
         f"👉 Group members: Reply \"I'm in\" or tap [ 👍 I'm In / Confirm ] to confirm your split!"
     )
 
+
 @tool
 def confirm_expense_split(channel_id: str, participant_name: str, expense_id: Optional[str] = None) -> str:
     """
@@ -154,10 +158,15 @@ def confirm_expense_split(channel_id: str, participant_name: str, expense_id: Op
     lines = [f"👍 Consent recorded for {participant_name}:"]
     for u in updated:
         if u["status"] == "confirmed":
-            lines.append(f"• ✅ '{u['description']}' (SGD {u['amount']:.2f}) is now FULLY CONFIRMED by all participants and active in the ledger!")
+            lines.append(
+                f"• ✅ '{u['description']}' (SGD {u['amount']:.2f}) is now FULLY CONFIRMED by all participants and active in the ledger!"
+            )
         else:
-            lines.append(f"• ⏳ '{u['description']}' (SGD {u['amount']:.2f}) confirmed by {participant_name}. Still awaiting: {', '.join(u['pending_for'])}.")
+            lines.append(
+                f"• ⏳ '{u['description']}' (SGD {u['amount']:.2f}) confirmed by {participant_name}. Still awaiting: {', '.join(u['pending_for'])}."
+            )
     return "\n".join(lines)
+
 
 @tool
 def get_balance_sheet(channel_id: str) -> str:
@@ -181,10 +190,7 @@ def get_balance_sheet(channel_id: str) -> str:
     total_confirmed = sum(e.amount for e in confirmed)
     transfers = simplify_debts(confirmed)
 
-    lines = [
-        f"📊 Group Expense Settlement Sheet (Active Confirmed: SGD {total_confirmed:.2f})",
-        "────────────────────────────────────────"
-    ]
+    lines = [f"📊 Group Expense Settlement Sheet (Active Confirmed: SGD {total_confirmed:.2f})", "────────────────────────────────────────"]
 
     if not confirmed:
         lines.append("ℹ️ No expenses have been finalized yet (awaiting participant consent).")
@@ -199,11 +205,16 @@ def get_balance_sheet(channel_id: str) -> str:
         lines.append("")
         lines.append("⏳ PENDING CONFIRMATION (Not in active balance until confirmed):")
         for p in pending:
-            pending_users = [u for u in p.split_between_user_ids if not any(c.lower() == u.lower() or u.lower() in c.lower() for c in p.confirmed_by_user_ids)]
+            pending_users = [
+                u
+                for u in p.split_between_user_ids
+                if not any(c.lower() == u.lower() or u.lower() in c.lower() for c in p.confirmed_by_user_ids)
+            ]
             lines.append(f"• SGD {p.amount:.2f} for '{p.description}' (Paid by {p.paid_by_name})")
             lines.append(f"  ├ Confirmed: {', '.join(p.confirmed_by_user_ids)} ✅")
             lines.append(f"  └ Awaiting: {', '.join(pending_users)} ⏳ (Reply 'I\\'m in' to confirm)")
 
     return "\n".join(lines)
+
 
 expense_tools = [record_expense, confirm_expense_split, get_balance_sheet]

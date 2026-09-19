@@ -6,10 +6,12 @@ import json
 
 PlatformType = Literal["telegram", "whatsapp", "discord", "mock"]
 
+
 class ChannelUser(BaseModel):
     id: str = Field(description="Unique platform user ID (e.g. phone number or Telegram UID)")
     name: str = Field(description="Display name of user (e.g. 'Alice')")
     handle: Optional[str] = Field(default=None, description="Platform @handle if available")
+
 
 class ChannelMedia(BaseModel):
     type: Literal["photo", "voice", "document", "location"]
@@ -19,10 +21,12 @@ class ChannelMedia(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
+
 class ChannelEvent(BaseModel):
     """
     Unified inbound message envelope abstracting away Telegram, WhatsApp, and Discord specifics.
     """
+
     event_id: str
     platform: PlatformType
     connection_id: str = "default"
@@ -48,16 +52,19 @@ class ChannelEvent(BaseModel):
     def explicitly_addressed(self) -> bool:
         return not self.is_group or self.is_bot_mentioned or self.is_reply_to_bot
 
+
 class InteractiveButton(BaseModel):
     id: str
     label: str
     type: Literal["callback", "url"] = "callback"
     url: Optional[str] = None
 
+
 class OutboundMessage(BaseModel):
     """
     Unified outbound response envelope dispatched back to Telegram or WhatsApp.
     """
+
     platform: PlatformType
     channel_id: str
     reply_to_message_id: Optional[str] = None

@@ -11,10 +11,19 @@ const SENDER_PRESETS = [
 ]
 
 const STARTER_PROMPTS = [
-  { label: '🗺️ 3-Day Tokyo Itinerary', text: 'Create a 3-day geographically clustered itinerary for Tokyo' },
-  { label: '🏨 Hotel in Shinjuku', text: 'Find a boutique hotel in Shinjuku, Tokyo with rating above 4.5' },
+  {
+    label: '🗺️ 3-Day Tokyo Itinerary',
+    text: 'Create a 3-day geographically clustered itinerary for Tokyo'
+  },
+  {
+    label: '🏨 Hotel in Shinjuku',
+    text: 'Find a boutique hotel in Shinjuku, Tokyo with rating above 4.5'
+  },
   { label: '✈️ Flights to Tokyo', text: 'Find flights from Singapore to Tokyo for next month' },
-  { label: '💸 Split Dinner $150', text: 'Alice paid $150 for dinner, split it equally between Alice, Bob and You' },
+  {
+    label: '💸 Split Dinner $150',
+    text: 'Alice paid $150 for dinner, split it equally between Alice, Bob and You'
+  },
   { label: '🔌 Active Skills', text: 'What skills and specialist capabilities do you have active?' }
 ]
 
@@ -66,7 +75,10 @@ export default function App() {
     const controller = new AbortController()
     const receive = async () => {
       try {
-        const response = await fetch(`/api/chat/messages?channel_id=${encodeURIComponent(channelId)}&after=${receivedSequence.current}`, { signal: controller.signal })
+        const response = await fetch(
+          `/api/chat/messages?channel_id=${encodeURIComponent(channelId)}&after=${receivedSequence.current}`,
+          { signal: controller.signal }
+        )
         if (!response.ok) throw new Error(`Connection unavailable (${response.status})`)
         const data = await response.json()
         if (stopped) return
@@ -75,11 +87,18 @@ export default function App() {
         if (data.messages.length) {
           receivedSequence.current = data.messages.at(-1).sequence
           setWaitingForReply(false)
-          setMessages((previous) => [...previous, ...data.messages.map((message) => ({
-            id: `server_${message.sequence}`, sender: 'RoamAI', isRoamAI: true,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            text: message.text, buttons: (message.buttons || []).flat(), toolCalls: message.tool_calls || []
-          }))])
+          setMessages((previous) => [
+            ...previous,
+            ...data.messages.map((message) => ({
+              id: `server_${message.sequence}`,
+              sender: 'RoamAI',
+              isRoamAI: true,
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              text: message.text,
+              buttons: (message.buttons || []).flat(),
+              toolCalls: message.tool_calls || []
+            }))
+          ])
         }
       } catch (error) {
         if (!stopped) setConnectionError(error.message)
@@ -88,7 +107,11 @@ export default function App() {
       }
     }
     receive()
-    return () => { stopped = true; clearTimeout(timer); controller.abort() }
+    return () => {
+      stopped = true
+      clearTimeout(timer)
+      controller.abort()
+    }
   }, [channelId])
 
   const handleSendMessage = async (textToSend, callbackData = null) => {
@@ -198,12 +221,17 @@ export default function App() {
                   className={`member-option ${currentSender.id === member.id ? 'active' : ''}`}
                   onClick={() => setCurrentSender(member)}
                 >
-                  <div className="member-avatar" style={{ background: member.color, color: '#fff' }}>
+                  <div
+                    className="member-avatar"
+                    style={{ background: member.color, color: '#fff' }}
+                  >
                     {member.initial}
                   </div>
                   <div>
                     <div style={{ fontWeight: 600 }}>{member.name}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{member.role}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {member.role}
+                    </div>
                   </div>
                 </button>
               ))}
@@ -308,8 +336,14 @@ export default function App() {
 
           {/* Footer Input */}
           <div className="chat-footer">
-            <label style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-              <input type="checkbox" checked={addressBot} onChange={(event) => setAddressBot(event.target.checked)} />
+            <label
+              style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}
+            >
+              <input
+                type="checkbox"
+                checked={addressBot}
+                onChange={(event) => setAddressBot(event.target.checked)}
+              />
               Address RoamAI
             </label>
             {connectionError && <div role="alert">{connectionError}</div>}
