@@ -147,11 +147,7 @@ class GroupPlanner:
                 for u in re.findall(r"https?://[^\s<>\[\]()]+", out_text):
                     try:
                         parsed = urlsplit(u)
-                        if (
-                            parsed.scheme in {"http", "https"}
-                            and parsed.hostname
-                            and parsed.hostname != "serpapi.com"
-                        ):
+                        if parsed.scheme in {"http", "https"} and parsed.hostname and parsed.hostname != "serpapi.com":
                             sources.add(u)
                             sources.add(clean_url(u))
                             base_path = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
@@ -186,16 +182,9 @@ class GroupPlanner:
                 host = parsed.hostname.lower()
                 path = parsed.path.lower()
                 if (
-                    (
-                        host in {"www.google.com", "google.com"}
-                        and (
-                            path.startswith("/travel/flights")
-                            or path.startswith("/travel/hotels")
-                            or path.startswith("/maps")
-                        )
-                    )
-                    or host == "maps.google.com"
-                ):
+                    host in {"www.google.com", "google.com"}
+                    and (path.startswith("/travel/flights") or path.startswith("/travel/hotels") or path.startswith("/maps"))
+                ) or host == "maps.google.com":
                     return True
 
                 cleaned = clean_url(url_str)
@@ -246,7 +235,10 @@ class GroupPlanner:
             airport_match = (
                 norm_quote == norm_dep
                 or (norm_dep and re.search(r"\b" + re.escape(departure) + r"\b", quote, re.I))
-                or (norm_dep and any(re.search(r"\b" + re.escape(c) + r"\b", quote, re.I) for c, iata in CITY_TO_IATA.items() if iata == norm_dep))
+                or (
+                    norm_dep
+                    and any(re.search(r"\b" + re.escape(c) + r"\b", quote, re.I) for c, iata in CITY_TO_IATA.items() if iata == norm_dep)
+                )
             )
             target_names = [quote, departure]
             if norm_dep:

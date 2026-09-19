@@ -166,7 +166,11 @@ def compact_schema(schema, is_top=True):
     if not isinstance(schema, dict):
         return schema
     return {
-        key: ({name: compact_schema(value, is_top=False) for name, value in child.items()} if key == "properties" else compact_schema(child, is_top=False))
+        key: (
+            {name: compact_schema(value, is_top=False) for name, value in child.items()}
+            if key == "properties"
+            else compact_schema(child, is_top=False)
+        )
         for key, child in schema.items()
         if key
         not in {

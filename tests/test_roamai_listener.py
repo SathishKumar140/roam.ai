@@ -946,15 +946,7 @@ def test_citations_support_topic_context_and_travel_portals():
             tool_call_id="search_hotels",
         )
     ]
-    context = {
-        "outbound": [
-            {
-                "payload": {
-                    "text": "Flights found: [Google Flights](https://www.google.com/travel/flights?q=Tokyo)."
-                }
-            }
-        ]
-    }
+    context = {"outbound": [{"payload": {"text": "Flights found: [Google Flights](https://www.google.com/travel/flights?q=Tokyo)."}}]}
     # Response citing stripped hotel url, previous flight link, and standard Google Hotels portal
     response = (
         "Here is your itinerary: Flight on [Google Flights](https://www.google.com/travel/flights?q=Tokyo). "
@@ -977,8 +969,6 @@ def test_citations_allow_google_maps_and_flights_with_query_params():
     # Even without specific tools returning these navigation queries, public travel portals are verified
     verified = planner.sourced_response(text, [])
     assert verified == text
-
-
 
 
 @pytest.mark.parametrize(

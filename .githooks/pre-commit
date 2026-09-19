@@ -5,6 +5,13 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
+if ! command -v node >/dev/null 2>&1 && [ -d "${HOME}/.nvm/versions/node" ]; then
+  LATEST_NODE="$(ls -d "${HOME}/.nvm/versions/node"/* 2>/dev/null | tail -n 1)/bin"
+  if [ -d "$LATEST_NODE" ]; then
+    PATH="$LATEST_NODE:$PATH"
+  fi
+fi
+
 staged_before="$(git diff --cached --name-only --diff-filter=ACM)"
 
 if [ -x frontend/node_modules/.bin/prettier ]; then

@@ -477,8 +477,8 @@ body {
 }
 
 .markdown-content a.map-location-link,
-.markdown-content a[href*="google.com/maps"],
-.markdown-content a[href*="maps.google.com"] {
+.markdown-content a[href*='google.com/maps'],
+.markdown-content a[href*='maps.google.com'] {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -497,8 +497,8 @@ body {
 }
 
 .markdown-content a.map-location-link:hover,
-.markdown-content a[href*="google.com/maps"]:hover,
-.markdown-content a[href*="maps.google.com"]:hover {
+.markdown-content a[href*='google.com/maps']:hover,
+.markdown-content a[href*='maps.google.com']:hover {
   background: rgba(16, 185, 129, 0.22);
   border-color: #34d399;
   color: #6ee7b7;

@@ -106,9 +106,8 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                                 "images",
                             }
                         }
-                        cleaned["link"] = (
-                            public_link
-                            or "https://www.google.com/travel/hotels?" + urlencode({"q": f"{hotel.get('name', '')} {loc}"})
+                        cleaned["link"] = public_link or "https://www.google.com/travel/hotels?" + urlencode(
+                            {"q": f"{hotel.get('name', '')} {loc}"}
                         )
                         cleaned["link_type"] = "hotel_website" if public_link else "public_hotel_search"
 
@@ -120,7 +119,9 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                         if lat and lon:
                             cleaned["google_maps_url"] = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
                         else:
-                            cleaned["google_maps_url"] = "https://www.google.com/maps/search/?" + urlencode({"api": "1", "query": f"{hotel_name} {loc}"})
+                            cleaned["google_maps_url"] = "https://www.google.com/maps/search/?" + urlencode(
+                                {"api": "1", "query": f"{hotel_name} {loc}"}
+                            )
 
                         # Extract formatted nearby distance/transit highlights
                         nearby = hotel.get("nearby_places", [])
@@ -130,7 +131,9 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                                 pname = place.get("name", "")
                                 trans = place.get("transportations", [])
                                 if trans:
-                                    t_desc = ", ".join(f"{t.get('duration', '')} by {t.get('type', '')}" for t in trans if t.get("duration"))
+                                    t_desc = ", ".join(
+                                        f"{t.get('duration', '')} by {t.get('type', '')}" for t in trans if t.get("duration")
+                                    )
                                     highlights.append(f"{pname} ({t_desc})" if t_desc else pname)
                                 else:
                                     highlights.append(pname)
@@ -159,7 +162,8 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                     "rate_per_night": {"extracted_lowest": "Live rate"},
                     "description": r.get("body", ""),
                     "link": r.get("href", "https://google.com/travel/hotels"),
-                    "google_maps_url": "https://www.google.com/maps/search/?" + urlencode({"api": "1", "query": f"{r.get('title', 'Hotel')} {loc}"}),
+                    "google_maps_url": "https://www.google.com/maps/search/?"
+                    + urlencode({"api": "1", "query": f"{r.get('title', 'Hotel')} {loc}"}),
                     "distance_highlights": f"Located in {loc}",
                 }
                 for r in ddg_res

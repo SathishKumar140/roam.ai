@@ -289,7 +289,7 @@ def search_cheapest_flights_in_month_handler(arguments: Dict[str, Any]) -> Dict[
     if not dep_raw or not arr_raw:
         return {"error": "Ask for departure and destination before searching", "best_flights": [], "flights": []}
     month_raw = str(arguments.get("month") or "").lower()
-    
+
     raw_duration = arguments.get("duration_days")
     try:
         duration = int(raw_duration) if raw_duration is not None else 5

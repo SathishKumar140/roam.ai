@@ -230,26 +230,29 @@ def test_flight_search_tolerant_to_null_and_string_adults_and_duration(monkeypat
     next_year_month = f"{date.today().year + 1}-01"
 
     # adults=None and duration_days=None must default gracefully without returning validation error
-    res_monthly = flight_server.search_cheapest_flights_in_month_handler({
-        "departure_id": "SIN",
-        "arrival_id": "DPS",
-        "month": next_year_month,
-        "adults": None,
-        "duration_days": None,
-    })
+    res_monthly = flight_server.search_cheapest_flights_in_month_handler(
+        {
+            "departure_id": "SIN",
+            "arrival_id": "DPS",
+            "month": next_year_month,
+            "adults": None,
+            "duration_days": None,
+        }
+    )
     assert "error" not in res_monthly or not res_monthly["error"]
     assert res_monthly["adults"] == 1
     assert res_monthly["trip_duration_days"] == 5
 
     # string adults and string duration
-    res_monthly_str = flight_server.search_cheapest_flights_in_month_handler({
-        "departure_id": "SIN",
-        "arrival_id": "DPS",
-        "month": next_year_month,
-        "adults": "2",
-        "duration_days": "7",
-    })
+    res_monthly_str = flight_server.search_cheapest_flights_in_month_handler(
+        {
+            "departure_id": "SIN",
+            "arrival_id": "DPS",
+            "month": next_year_month,
+            "adults": "2",
+            "duration_days": "7",
+        }
+    )
     assert "error" not in res_monthly_str or not res_monthly_str["error"]
     assert res_monthly_str["adults"] == 2
     assert res_monthly_str["trip_duration_days"] == 7
-

@@ -294,7 +294,10 @@ export default function App() {
                         remarkPlugins={[[remarkGfm, { singleTilde: false }]]}
                         components={{
                           a: ({ node, ...props }) => {
-                            const isMap = props.href && (props.href.includes('google.com/maps') || props.href.includes('maps.google.com'))
+                            const isMap =
+                              props.href &&
+                              (props.href.includes('google.com/maps') ||
+                                props.href.includes('maps.google.com'))
                             return (
                               <a
                                 {...props}
