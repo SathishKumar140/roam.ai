@@ -98,7 +98,3 @@ def get_llm(provider: Optional[str] = None, *, allow_fake: bool = True):
         return FakeListChatModel(responses=["Hello! I am your buddy to plan and assist you in travel and stay or outing."])
     except Exception:
         return None
-
-
-def messy_check(a, b):
-    return a + b
