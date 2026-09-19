@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Auto-formats files staged for this commit (Prettier + ruff), re-stages them,
+# and continues. Installed via `scripts/dev.sh hooks:install` (core.hooksPath).
+set -euo pipefail
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+staged_before="$(git diff --cached --name-only --diff-filter=ACM)"
+
+if [ -x frontend/node_modules/.bin/prettier ]; then
+  echo "[pre-commit] Formatting frontend with Prettier..."
+  (cd frontend && npx --no-install prettier --write . >/dev/null)
+else
+  echo "[pre-commit] Skipping Prettier: run 'npm --prefix frontend install'" >&2
+fi
+
+if [ -x .venv/bin/ruff ]; then
+  echo "[pre-commit] Formatting Python with ruff..."
+  .venv/bin/ruff format src tests evals >/dev/null
+  .venv/bin/ruff check --fix src tests evals >/dev/null || true
+else
+  echo "[pre-commit] Skipping ruff: run '.venv/bin/pip install -r requirements-dev.txt'" >&2
+fi
+
+# Only re-stage files that were already part of this commit.
+while IFS= read -r file; do
+  [ -z "$file" ] && continue
+  if [ -f "$file" ] && ! git diff --quiet -- "$file"; then
+    git add "$file"
+    echo "[pre-commit] Re-staged formatted file: $file"
+  fi
+done <<< "$staged_before"
+
+exit 0

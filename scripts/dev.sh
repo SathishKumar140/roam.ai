@@ -15,6 +15,7 @@ Usage: scripts/dev.sh <command> [args...]
                   Regenerate the HTML report from an existing JSON report
   app             Run the FastAPI application (uvicorn, auto-reload)
   frontend        Run the frontend dev server (Vite)
+  hooks:install   Run format automatically on every commit (git pre-commit hook)
 
 Python formatting requires ruff: .venv/bin/pip install -r requirements-dev.txt
 USAGE
@@ -48,6 +49,10 @@ case "$cmd" in
     ;;
   frontend)
     (cd frontend && npm run dev)
+    ;;
+  hooks:install)
+    git config core.hooksPath .githooks
+    echo "Installed: .githooks/pre-commit now formats staged files on every commit."
     ;;
   help|-h|--help)
     usage
