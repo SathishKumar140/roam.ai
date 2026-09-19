@@ -465,6 +465,47 @@ body {
   margin: 12px 0;
 }
 
+.markdown-content a {
+  color: #38bdf8;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.2s ease;
+}
+
+.markdown-content a:hover {
+  color: #7dd3fc;
+}
+
+.markdown-content a.map-location-link,
+.markdown-content a[href*="google.com/maps"],
+.markdown-content a[href*="maps.google.com"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-decoration: none;
+  margin: 2px 4px 2px 0;
+  vertical-align: middle;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.markdown-content a.map-location-link:hover,
+.markdown-content a[href*="google.com/maps"]:hover,
+.markdown-content a[href*="maps.google.com"]:hover {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: #34d399;
+  color: #6ee7b7;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+
 .bubble-user {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-subtle);

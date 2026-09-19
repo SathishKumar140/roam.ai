@@ -119,7 +119,7 @@ class RoamAIService:
                         return True
                 if self.store.pending_reply(group_id, event.sender.id, rows[-1]["id"]):
                     self.store.mark_responding(rows)
-                observation = await asyncio.wait_for(self.listener.observe(context, batch), timeout=30)
+                observation = await asyncio.wait_for(self.listener.observe(context, batch), timeout=60)
                 messages = {message["id"]: message for message in context["messages"]}
                 if not set(observation.evidence_message_ids) <= messages.keys():
                     logger.warning("Observer validation failed: unknown evidence ID")

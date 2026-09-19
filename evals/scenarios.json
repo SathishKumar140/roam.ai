@@ -102,5 +102,33 @@
       {"speaker": "Alice", "text": "I'm traveling from Singapore.", "addressed": true},
       {"speaker": "Alice", "text": "Focus on flight prices and find me the cheapest options.", "addressed": true}
     ]
+  },
+  {
+    "id": "itinerary-hotel-followup",
+    "use_case": "The user asks for flights from Singapore to Tokyo for next month, then follows up asking for the complete itinerary with hotels. Finally, when the user confirms with 'yes' or asks to finalize the day-by-day itinerary, the assistant provides the complete day-by-day sightseeing schedule immediately without getting stuck in a repetitive loop asking about preferences.",
+    "criteria": [
+      "Flight options from Singapore to Tokyo are discovered and presented with airlines and fares.",
+      "When the user requests the itinerary with hotels, the assistant searches hotels for the matching dates and presents real options with neighborhood details, distance highlights, and direct Google Maps links without source verification rejection errors.",
+      "When the user confirms to finalize the day-by-day itinerary, the assistant immediately delivers a complete multi-day schedule (Day 1 to Day N) covering cultural sights, dining, and neighborhoods.",
+      "The assistant does not get stuck in a repetitive loop re-asking whether the user wants cultural sights, food spots, or shopping."
+    ],
+    "turns": [
+      {"speaker": "Alice", "text": "Find flights from Singapore to Tokyo for next month.", "addressed": true},
+      {"speaker": "Alice", "text": "Yes, provide the itinerary with hotels completely.", "addressed": true},
+      {"speaker": "Alice", "text": "Yes, finalize our day-by-day sightseeing itinerary now.", "addressed": true}
+    ]
+  },
+  {
+    "id": "hotel-maps-navigation",
+    "use_case": "The user searches for hotels and navigation in Tokyo. The assistant discovers hotels using live tools and presents options with proximity/distance highlights and direct Google Maps links.",
+    "criteria": [
+      "The assistant executes hotel discovery tools for the requested destination.",
+      "Hotel recommendations include distance or transit highlights to key stations or landmarks (e.g. walking or taxi times).",
+      "Hotel recommendations include direct Google Maps links (e.g. https://www.google.com/maps/search/?api=1&query=...) for travelers to inspect the location and plan navigation.",
+      "All links and recommendations pass citation verification without 'couldn't verify the source links' errors."
+    ],
+    "turns": [
+      {"speaker": "Alice", "text": "Suggest hotels in Tokyo for October 21-26, 2026 with Google Maps location links and distance highlights.", "addressed": true}
+    ]
   }
 ]

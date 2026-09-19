@@ -290,7 +290,22 @@ export default function App() {
                       </div>
                     )}
                     <div className="markdown-content">
-                      <ReactMarkdown remarkPlugins={[[remarkGfm, { singleTilde: false }]]}>
+                      <ReactMarkdown
+                        remarkPlugins={[[remarkGfm, { singleTilde: false }]]}
+                        components={{
+                          a: ({ node, ...props }) => {
+                            const isMap = props.href && (props.href.includes('google.com/maps') || props.href.includes('maps.google.com'))
+                            return (
+                              <a
+                                {...props}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={isMap ? 'map-location-link' : 'inline-link'}
+                              />
+                            )
+                          }
+                        }}
+                      >
                         {msg.text}
                       </ReactMarkdown>
                     </div>

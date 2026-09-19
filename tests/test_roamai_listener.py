@@ -925,6 +925,62 @@ def test_citations_require_structured_tool_provenance_without_credentials():
     assert "couldn't verify" in rejected and "secret" not in rejected
 
 
+def test_citations_support_topic_context_and_travel_portals():
+    import json
+    from langchain_core.messages import ToolMessage
+    from src.agents.group_planner import GroupPlanner
+
+    planner = GroupPlanner()
+    messages = [
+        ToolMessage(
+            content=json.dumps(
+                {
+                    "properties": [
+                        {
+                            "name": "Tokyo Levant",
+                            "link": "https://www.tobuhotel.co.jp/levant/?utm_source=google",
+                        }
+                    ]
+                }
+            ),
+            tool_call_id="search_hotels",
+        )
+    ]
+    context = {
+        "outbound": [
+            {
+                "payload": {
+                    "text": "Flights found: [Google Flights](https://www.google.com/travel/flights?q=Tokyo)."
+                }
+            }
+        ]
+    }
+    # Response citing stripped hotel url, previous flight link, and standard Google Hotels portal
+    response = (
+        "Here is your itinerary: Flight on [Google Flights](https://www.google.com/travel/flights?q=Tokyo). "
+        "Stay at [Tobu Hotel](https://www.tobuhotel.co.jp/levant). "
+        "More options on [Google Hotels](https://www.google.com/travel/hotels)."
+    )
+    verified = planner.sourced_response(response, messages, context=context)
+    assert verified == response
+
+
+def test_citations_allow_google_maps_and_flights_with_query_params():
+    from src.agents.group_planner import GroupPlanner
+
+    planner = GroupPlanner()
+    text = (
+        "Here is your route to [Tokyo Skytree](https://www.google.com/maps/search/?api=1&query=Tokyo+Skytree). "
+        "Directions: [Route](https://www.google.com/maps/dir/?api=1&destination=Sensoji). "
+        "Flight options on [Google Flights](https://www.google.com/travel/flights?hl=en&gl=us&tfs=CBwQAhoeEgoyMDI2)."
+    )
+    # Even without specific tools returning these navigation queries, public travel portals are verified
+    verified = planner.sourced_response(text, [])
+    assert verified == text
+
+
+
+
 @pytest.mark.parametrize(
     "amount,amount_quote,source_id,accepted",
     [

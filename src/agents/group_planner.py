@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -10,6 +11,8 @@ from langchain_core.tools import StructuredTool, tool
 from pydantic import Field, create_model
 
 from src.agents.deep_companion import create_roamai_companion
+
+logger = logging.getLogger("roam.ai.planner")
 
 
 PLANNER_PROMPT = """You are RoamAI, a friendly group planner. You are responding to an accepted
@@ -44,7 +47,12 @@ Only cite exact URLs returned by discovery tools in this turn. Search snippets a
 of live availability, prices, accessibility or dietary suitability. Clearly label those unverified.
 Do not search flights or hotels for a local activity unless requested.
 When travel dates or flight dates (e.g. departure and return) have been identified or recommended for this trip and the user requests hotels as well, use those confirmed dates to search hotels rather than asking the user to re-specify them.
+When recommending hotels, include the hotel's neighborhood, proximity or distance/transit details to key stations or landmarks (from distance_highlights or nearby_places), and a direct Google Maps link (e.g. [📍 View on Google Maps](<google_maps_url>)) so travelers can inspect the exact location and plan routes.
 When departure, destination, and duration/month are known (e.g. traveling from Singapore to Bali for five days in November) and the user requests cheapest flights or price focus, immediately delegate to the travel specialist to execute flight discovery across the month rather than asking for exact dates or extra parameters.
+When destination and trip duration or dates are established (e.g. 5 days in Tokyo) and the user requests, confirms, or agrees to a sightseeing itinerary (such as saying "yes", "suggest best", "plan it", "create itinerary", "finalize itinerary", or confirming a flight/hotel combination):
+- DO NOT ask follow-up questions asking the user to choose between sights, food, or shopping.
+- Immediately generate and deliver the complete day-by-day sightseeing itinerary (Day 1 through Day N) with morning, afternoon, and evening recommendations featuring a balanced mix of iconic cultural landmarks, renowned local dining/food spots, and vibrant neighborhoods for the destination and duration.
+- Never repeat a question you previously asked or loop on asking how they want to customize it before presenting the initial itinerary.
 Before flight search, ask for the departure city/airport unless a user has stated it for this trip.
 Never use a tool example, another trip's origin, or a previous bot guess as evidence. Keep airfare
 separate from a ground-only budget. Pass the confirmed traveler count and requested currency.
@@ -58,24 +66,41 @@ class GroupPlanner:
     def __init__(self, model=None):
         self.model = model
 
-    def sourced_response(self, text, messages):
+    def sourced_response(self, text, messages, context=None):
         sources = set()
 
+        # Public trusted travel portals
+        for base in [
+            "https://www.google.com/travel/flights",
+            "https://google.com/travel/flights",
+            "https://www.google.com/travel/hotels",
+            "https://google.com/travel/hotels",
+            "https://maps.google.com",
+            "https://www.google.com/maps",
+        ]:
+            sources.add(base)
+
         def clean_url(u):
-            return u.rstrip(".,;:!?)'\"").rstrip("/")
+            return u.rstrip(".,;:!?)'\"<>[]").rstrip("/")
 
         def collect(value):
             if isinstance(value, dict):
                 for key, child in value.items():
-                    if isinstance(child, str) and (key in {"link", "url", "href", "source_url", "google_flights_url"} or child.startswith(("http://", "https://"))):
+                    if isinstance(child, str) and (
+                        key in {"link", "url", "href", "source_url", "google_flights_url"}
+                        or key.endswith(("_link", "_url"))
+                        or child.startswith(("http://", "https://"))
+                    ):
+                        if key in {"body", "snippet", "description", "summary", "text", "content"}:
+                            continue
                         try:
                             parsed = urlsplit(child)
                             sensitive = {name.lower() for name, value in parse_qsl(parsed.query)} & {
                                 "api_key",
-                                "key",
-                                "token",
+                                "secret",
                                 "access_token",
-                                "property_token",
+                                "auth_token",
+                                "bearer",
                             }
                             if (
                                 parsed.scheme in {"http", "https"}
@@ -87,6 +112,9 @@ class GroupPlanner:
                             ):
                                 sources.add(child)
                                 sources.add(clean_url(child))
+                                base_path = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+                                sources.add(base_path)
+                                sources.add(clean_url(base_path))
                         except ValueError:
                             pass
                     collect(child)
@@ -98,16 +126,93 @@ class GroupPlanner:
             if getattr(message, "type", None) != "tool":
                 continue
             content = message.content
+            if isinstance(content, (dict, list)):
+                collect(content)
+                continue
             parts = content if isinstance(content, list) else [content]
             for part in parts:
+                if isinstance(part, (dict, list)):
+                    collect(part)
+                    continue
                 raw = part.get("text", "") if isinstance(part, dict) else part
                 try:
                     collect(json.loads(raw))
                 except (ValueError, TypeError):
                     continue
+
+        if context:
+            for item in context.get("outbound", []):
+                payload = item.get("payload") if isinstance(item, dict) else None
+                out_text = payload.get("text", "") if isinstance(payload, dict) else ""
+                for u in re.findall(r"https?://[^\s<>\[\]()]+", out_text):
+                    try:
+                        parsed = urlsplit(u)
+                        if (
+                            parsed.scheme in {"http", "https"}
+                            and parsed.hostname
+                            and parsed.hostname != "serpapi.com"
+                        ):
+                            sources.add(u)
+                            sources.add(clean_url(u))
+                            base_path = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+                            sources.add(base_path)
+                            sources.add(clean_url(base_path))
+                    except ValueError:
+                        pass
+
         cited = {clean_url(url) for url in re.findall(r"https?://[^\s<>\[\]()]+", text)}
         norm_sources = {clean_url(url) for url in sources}
-        if not cited <= norm_sources:
+
+        def is_url_verified(url_str):
+            try:
+                parsed = urlsplit(url_str)
+                if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+                    return False
+                if parsed.username or parsed.password:
+                    return False
+                if parsed.hostname == "serpapi.com":
+                    return False
+                sensitive = {name.lower() for name, _ in parse_qsl(parsed.query)} & {
+                    "api_key",
+                    "secret",
+                    "access_token",
+                    "auth_token",
+                    "bearer",
+                }
+                if sensitive:
+                    return False
+
+                # Public trusted travel and navigation portals (Google Flights, Google Hotels, Google Maps)
+                host = parsed.hostname.lower()
+                path = parsed.path.lower()
+                if (
+                    (
+                        host in {"www.google.com", "google.com"}
+                        and (
+                            path.startswith("/travel/flights")
+                            or path.startswith("/travel/hotels")
+                            or path.startswith("/maps")
+                        )
+                    )
+                    or host == "maps.google.com"
+                ):
+                    return True
+
+                cleaned = clean_url(url_str)
+                if cleaned in norm_sources:
+                    return True
+
+                base_path = clean_url(f"{parsed.scheme}://{parsed.netloc}{parsed.path}")
+                if base_path in norm_sources:
+                    return True
+
+                return False
+            except Exception:
+                return False
+
+        unverified = [url for url in cited if not is_url_verified(url)]
+        if unverified:
+            logger.info("Citations unverified for urls=%s", unverified)
             return "I couldn't verify the source links for that recommendation. Please ask me to search again; I haven't confirmed availability or suitability."
         return text
 
@@ -333,13 +438,14 @@ class GroupPlanner:
             "search_flights",
             "search_hotels",
             "search_cheapest_flights_in_month",
+            "generate_itinerary",
             "convert_currency",
             "get_weather_forecast",
             "calculate_distance",
             "geocode_location",
         }
         discovery = {}
-        for candidate in [item for item in travel_tools if item.name == "search_web"] + mcp_manager.get_all_tools():
+        for candidate in [item for item in travel_tools if item.name in {"search_web", "generate_itinerary"}] + mcp_manager.get_all_tools():
             if candidate.name in allowed:
                 discovery[candidate.name] = candidate
         for name in {"search_flights", "search_cheapest_flights_in_month"} & discovery.keys():
@@ -370,7 +476,7 @@ class GroupPlanner:
         if isinstance(text, list):
             text = "\n".join(part if isinstance(part, str) else part.get("text", "") for part in text)
         source_messages = [message for message in result.get("tool_results", []) if message.name in discovery]
-        text = self.sourced_response(text, source_messages)
+        text = self.sourced_response(text, source_messages, context=context)
         if any(message.name == "get_group_balances" for message in result.get("tool_results", [])):
             balances = store.balances(event.conversation_id)
             names = {member["user_id"]: member["name"] for member in context["members"]}

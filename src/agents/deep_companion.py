@@ -31,6 +31,7 @@ def create_roamai_companion(*, tools, model=None, system_prompt=None, request_co
                 "search_flights",
                 "search_hotels",
                 "search_cheapest_flights_in_month",
+                "generate_itinerary",
                 "get_weather_forecast",
                 "convert_currency",
                 "calculate_distance",

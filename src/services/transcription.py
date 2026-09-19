@@ -71,20 +71,54 @@ async def transcribe_audio_async(
         logger.warning("⚠️ Audio payload is empty or too short for transcription.")
         return None
 
-    # 4. Transcribe using OpenAI Whisper API with travel domain conditioning
-    try:
-        from openai import AsyncOpenAI
+    # 4. Transcribe using OpenAI Whisper API or Gemini Multimodal Audio
+    if settings.DEFAULT_LLM_PROVIDER != "gemini" and settings.OPENAI_API_KEY:
+        try:
+            from openai import AsyncOpenAI
 
-        client = AsyncOpenAI(api_key=api_key)
-        transcription = await client.audio.transcriptions.create(
-            model="whisper-1", file=(filename, audio_bytes, mime_type), prompt=WHISPER_TRAVEL_PROMPT, language="en"
-        )
-        text = transcription.text.strip()
-        logger.info(f'🎙️ [Whisper Transcribed] "{text}"')
-        return text
-    except Exception as e:
-        logger.error(f"❌ OpenAI Whisper transcription failed: {e}")
-        return None
+            client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+            transcription = await client.audio.transcriptions.create(
+                model="whisper-1", file=(filename, audio_bytes, mime_type), prompt=WHISPER_TRAVEL_PROMPT, language="en"
+            )
+            text = transcription.text.strip()
+            logger.info(f'🎙️ [Whisper Transcribed] "{text}"')
+            return text
+        except Exception as e:
+            logger.warning(f"⚠️ OpenAI Whisper transcription failed ({e}), trying Gemini fallback...")
+
+    if settings.GEMINI_API_KEY:
+        try:
+            from google import genai
+            from google.genai import types
+
+            client = genai.Client(api_key=settings.GEMINI_API_KEY)
+            res = await client.aio.models.generate_content(
+                model=settings.GEMINI_MODEL,
+                contents=[
+                    types.Part.from_bytes(data=audio_bytes, mime_type=mime_type),
+                    "Generate a direct transcript of this speech. Return ONLY the transcribed text without quotes, formatting, or commentary.",
+                ],
+            )
+            text = (res.text or "").strip()
+            logger.info(f'🎙️ [Gemini Transcribed] "{text}"')
+            return text
+        except Exception as e:
+            logger.error(f"❌ Gemini audio transcription failed: {e}")
+
+    if settings.OPENAI_API_KEY:
+        try:
+            from openai import AsyncOpenAI
+
+            client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+            transcription = await client.audio.transcriptions.create(
+                model="whisper-1", file=(filename, audio_bytes, mime_type), prompt=WHISPER_TRAVEL_PROMPT, language="en"
+            )
+            text = transcription.text.strip()
+            logger.info(f'🎙️ [Whisper Transcribed] "{text}"')
+            return text
+        except Exception as e:
+            logger.error(f"❌ OpenAI Whisper transcription failed: {e}")
+            return None
 
 
 def transcribe_audio(audio_source: Union[bytes, str], mime_type: str = "audio/ogg", filename: str = "voice.oga") -> Optional[str]:

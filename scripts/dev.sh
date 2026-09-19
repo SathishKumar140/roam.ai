@@ -3,6 +3,15 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+if ! command -v npm >/dev/null 2>&1; then
+  for nvm_node in "$HOME"/.nvm/versions/node/*/bin/npm; do
+    if [ -x "$nvm_node" ]; then
+      export PATH="$(dirname "$nvm_node"):$PATH"
+      break
+    fi
+  done
+fi
+
 usage() {
   cat <<'USAGE'
 Usage: scripts/dev.sh <command> [args...]
