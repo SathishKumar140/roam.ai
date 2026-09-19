@@ -87,5 +87,20 @@
       {"speaker": "Bob", "text": "Yes, help us", "button": "Yes, help us", "addressed": false},
       {"speaker": "Alice", "text": "No thanks, I do not want to split lunch", "addressed": true}
     ]
+  },
+  {
+    "id": "natural-departure-flight-search",
+    "use_case": "The user plans a five-day trip to Bali in November and states 'I'm traveling from Singapore.' When asked to focus on flight prices and find the cheapest options, the assistant grounds departure from that natural language sentence, delegates to the travel specialist, executes flight discovery tools, and returns concrete flight options with dates, airlines, and prices rather than an empty promise to search later.",
+    "criteria": [
+      "Departure is successfully grounded from natural language phrasing ('I'm traveling from Singapore.') without rejection.",
+      "The assistant delegates to the travel specialist and executes flight discovery tools.",
+      "Responses provide concrete airlines, travel dates, and fares from the search results.",
+      "The assistant does not defer execution with empty placeholder promises when departure and dates are known."
+    ],
+    "turns": [
+      {"speaker": "Alice", "text": "I'm planning a trip to Bali for five days in November.", "addressed": true},
+      {"speaker": "Alice", "text": "I'm traveling from Singapore.", "addressed": true},
+      {"speaker": "Alice", "text": "Focus on flight prices and find me the cheapest options.", "addressed": true}
+    ]
   }
 ]

@@ -20,7 +20,7 @@ Queries hotels, resorts, and vacation stays matching group preferences and locat
 
 ## Instructions
 1. Check destination, explicit future check-in/check-out dates, occupancy, budget units and requested currency. Use only this trip's current facts.
-2. If travel dates are missing or unspecified, clarify with the user first (e.g. "What dates will you need accommodation for?").
+2. If explicit check-in/check-out dates are not specified, but flight or trip dates (such as departure and return dates) are established or recommended for this trip, use those dates for the hotel stay. If travel dates are completely missing or unknown, clarify with the user first (e.g. "What dates will you need accommodation for?").
 3. Call `search_hotels` using its actual schema, including adults and currency. Never silently change a year or assume two travelers.
 4. Compare returned properties with the group's constraints. Missing ratings, accessibility or dietary information are unknown, not verified matches.
 5. Present returned prices with nightly/total units when known and exact public source URLs. Search results do not establish a booking or guaranteed availability.

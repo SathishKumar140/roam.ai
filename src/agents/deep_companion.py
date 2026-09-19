@@ -143,6 +143,10 @@ class ScopedDeepAgentCompanion:
             async def on_tool_end(self, output, **kwargs):
                 if isinstance(output, ToolMessage):
                     self.results.append(output)
+                else:
+                    content = output if isinstance(output, str) else json.dumps(output, default=str)
+                    name = kwargs.get("name") or "tool"
+                    self.results.append(ToolMessage(content=content, name=name, tool_call_id=str(kwargs.get("run_id", ""))))
 
         trace = ToolTrace()
         options = dict(config or {})

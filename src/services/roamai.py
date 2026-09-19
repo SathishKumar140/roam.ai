@@ -223,7 +223,7 @@ class RoamAIService:
                 else:
                     self.store.complete(rows)
         except Exception as error:
-            logger.warning("Processing failed group=%s error=%s", group_id, type(error).__name__)
+            logger.warning("Processing failed group=%s error=%r", group_id, error, exc_info=True)
             self.store.retry(rows, type(error).__name__)
         return True
 

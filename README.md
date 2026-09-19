@@ -241,9 +241,32 @@ Fill in your keys:
 pytest tests/ -v
 ```
 
-### 3. Start the Webhook Server
+### 3. Run Everything in One Command (Recommended)
 ```bash
-uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+./scripts/dev.sh all
+# Aliases: ./scripts/dev.sh dev  OR  ./scripts/dev.sh start
+```
+Starts everything together with graceful shutdown on `Ctrl+C`:
+1. **Backend**: FastAPI / Uvicorn with auto-reload on `http://127.0.0.1:8000`
+2. **Frontend**: Vite simulator on `http://localhost:5173`
+3. **Tunnel**: Cloudflare tunnel + auto-registers webhook with Telegram API
+
+Or run individual services modularly:
+```bash
+# Backend only
+./scripts/dev.sh app
+
+# Frontend only
+./scripts/dev.sh frontend
+
+# Telegram tunnel only
+./scripts/dev.sh tunnel
+
+# Register Telegram webhook manually
+./scripts/dev.sh telegram:webhook <TUNNEL_URL>
+
+# Verify Telegram webhook status
+./scripts/dev.sh telegram:info
 ```
 
 ---

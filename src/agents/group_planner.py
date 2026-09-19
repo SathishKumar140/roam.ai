@@ -22,6 +22,7 @@ When comparison_topics is supplied, compare those topics without changing any pl
 are available in comparison mode. Missing facts remain unknown; never borrow one trip's facts for another.
 Keep answers short and conversational. No Unicode frames or decorative text boxes.
 Ask one concise question for missing essentials. Do not default to Singapore, SGD, a date or invented people.
+Always acknowledge newly provided details (such as departure, destination, dates, or travelers) and respond directly to what the user said; never repeat generic questions or offers that have already been answered.
 A bare yes to an offer accepts help, not a booking, poll configuration or expense split.
 For expenses, confirm the amount, currency, description and actual participating identities.
 Ask whether the payer is included. A head count alone is insufficient for a ledger.
@@ -42,6 +43,8 @@ if verification fails, say so. General venue suggestions are not confirmed sched
 Only cite exact URLs returned by discovery tools in this turn. Search snippets are leads, not proof
 of live availability, prices, accessibility or dietary suitability. Clearly label those unverified.
 Do not search flights or hotels for a local activity unless requested.
+When travel dates or flight dates (e.g. departure and return) have been identified or recommended for this trip and the user requests hotels as well, use those confirmed dates to search hotels rather than asking the user to re-specify them.
+When departure, destination, and duration/month are known (e.g. traveling from Singapore to Bali for five days in November) and the user requests cheapest flights or price focus, immediately delegate to the travel specialist to execute flight discovery across the month rather than asking for exact dates or extra parameters.
 Before flight search, ask for the departure city/airport unless a user has stated it for this trip.
 Never use a tool example, another trip's origin, or a previous bot guess as evidence. Keep airfare
 separate from a ground-only budget. Pass the confirmed traveler count and requested currency.
@@ -58,10 +61,13 @@ class GroupPlanner:
     def sourced_response(self, text, messages):
         sources = set()
 
+        def clean_url(u):
+            return u.rstrip(".,;:!?)'\"").rstrip("/")
+
         def collect(value):
             if isinstance(value, dict):
                 for key, child in value.items():
-                    if key in {"link", "url", "href", "source_url", "google_flights_url"} and isinstance(child, str):
+                    if isinstance(child, str) and (key in {"link", "url", "href", "source_url", "google_flights_url"} or child.startswith(("http://", "https://"))):
                         try:
                             parsed = urlsplit(child)
                             sensitive = {name.lower() for name, value in parse_qsl(parsed.query)} & {
@@ -80,6 +86,7 @@ class GroupPlanner:
                                 and parsed.hostname != "serpapi.com"
                             ):
                                 sources.add(child)
+                                sources.add(clean_url(child))
                         except ValueError:
                             pass
                     collect(child)
@@ -98,8 +105,9 @@ class GroupPlanner:
                     collect(json.loads(raw))
                 except (ValueError, TypeError):
                     continue
-        cited = {url.rstrip(".,;:!?") for url in re.findall(r"https?://[^\s<>\[\]()]+", text)}
-        if not cited <= sources:
+        cited = {clean_url(url) for url in re.findall(r"https?://[^\s<>\[\]()]+", text)}
+        norm_sources = {clean_url(url) for url in sources}
+        if not cited <= norm_sources:
             return "I couldn't verify the source links for that recommendation. Please ask me to search again; I haven't confirmed availability or suitability."
         return text
 
@@ -126,12 +134,26 @@ class GroupPlanner:
             quote = arguments.pop("departure_text").strip()
             departure = arguments.get("departure_id") or arguments.get("origin") or ""
             uncertain = re.search(r"\b(?:not|no|never|don't|dont|undecided|unsure|maybe|perhaps|instead|ignore)\b|\?", source, re.I)
+            norm_dep = normalize_airport(departure)
+            norm_quote = normalize_airport(quote)
+            from src.mcp.travelassistant.flight_server import CITY_TO_IATA
+
+            airport_match = (
+                norm_quote == norm_dep
+                or (norm_dep and re.search(r"\b" + re.escape(departure) + r"\b", quote, re.I))
+                or (norm_dep and any(re.search(r"\b" + re.escape(c) + r"\b", quote, re.I) for c, iata in CITY_TO_IATA.items() if iata == norm_dep))
+            )
+            target_names = [quote, departure]
+            if norm_dep:
+                target_names.extend([c for c, iata in CITY_TO_IATA.items() if iata == norm_dep])
+            target_pattern = "|".join(re.escape(name) for name in set(target_names) if len(name) >= 3)
             affirmative = re.search(
-                r"\b(?:from|depart(?:ure|ing)?|fly(?:ing)?|leav(?:e|ing)|origin)"
-                r"(?:\s+(?:city|airport))?(?:\s+(?:is|from))?[:\s]+" + re.escape(quote) + r"(?=$|[\s,.;()])",
+                r"\b(?:from|depart(?:ure|ing)?|fly(?:ing)?|leav(?:e|ing)|travel(?:ing)?\s+from|origin)"
+                r"(?:\s+(?:city|airport))?(?:\s+(?:is|from))?[:\s]+"
+                r"(?:" + target_pattern + r")(?=$|[\s,.;()])",
                 source,
                 re.I,
-            )
+            ) or (source.strip().casefold() == quote.casefold())
             current = next(
                 (topic.get("facts", {}).get("departure") for topic in context.get("topics", []) if topic.get("facts", {}).get("departure")),
                 None,
@@ -140,10 +162,10 @@ class GroupPlanner:
                 len(quote) < 3
                 or quote.casefold() not in source.casefold()
                 or not departure
-                or normalize_airport(quote) != normalize_airport(departure)
+                or not airport_match
                 or (current and current["evidence_id"] != evidence_id)
                 or uncertain
-                or not (affirmative or source.strip().casefold() == quote.casefold())
+                or not affirmative
             ):
                 return json.dumps(
                     {

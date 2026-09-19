@@ -171,8 +171,12 @@ def search_flights_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
     raw_date = arguments.get("outbound_date") or arguments.get("date")
     if not dep_raw or not arr_raw or not raw_date:
         return {"error": "Ask for departure, destination and departure date before searching", "best_flights": [], "flights": []}
-    adults = arguments.get("adults") if arguments.get("adults") is not None else 1
-    if type(adults) is not int or adults < 1:
+    raw_adults = arguments.get("adults")
+    try:
+        adults = int(raw_adults) if raw_adults is not None else 1
+    except (ValueError, TypeError):
+        adults = 1
+    if adults < 1:
         return {"error": "adults must be a positive integer", "best_flights": [], "flights": []}
     ret_date_raw = arguments.get("return_date")
     try:
@@ -248,30 +252,31 @@ def search_flights_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                     "airline": r.get("title", "").split("-")[0].strip() if "-" in r.get("title", "") else "Scheduled Airline",
                     "dep": "See live link",
                     "arr": "See live link",
-                    "price": "Live market rate",
-                    "link": r.get("href", ""),
+                    "price": f"Live fares via {r.get('title')}",
+                    "link": r.get("href"),
                 }
                 for r in ddg_res
             ]
             return {
-                "source": "mcp_travelassistant_live_flights_search",
+                "source": "mcp_travelassistant_duckduckgo_live",
                 "route": f"{dep} -> {arr}",
                 "date": date,
+                "return_date": ret_date,
+                "adults": adults,
                 "currency": currency,
-                "best_flights": flights,
                 "flights": flights,
             }
     except Exception as e:
-        sys.stderr.write(f"⚠️ Live flight search fallback failed: {e}\n")
+        sys.stderr.write(f"⚠️ [DuckDuckGo Fallback] Search failed: {e}\n")
+        sys.stderr.flush()
 
     return {
-        "source": "mcp_travelassistant_flight_server",
+        "error": "No flight options could be found for this route and date right now. Please try alternative dates.",
         "route": f"{dep} -> {arr}",
         "date": date,
         "currency": currency,
         "best_flights": [],
         "flights": [],
-        "message": f"No live flights found for route {dep} -> {arr} on {date}. Please verify airport codes or try alternative dates.",
     }
 
 
@@ -284,9 +289,20 @@ def search_cheapest_flights_in_month_handler(arguments: Dict[str, Any]) -> Dict[
     if not dep_raw or not arr_raw:
         return {"error": "Ask for departure and destination before searching", "best_flights": [], "flights": []}
     month_raw = str(arguments.get("month") or "").lower()
-    duration = arguments.get("duration_days", 5)
-    adults = arguments.get("adults", 1)
-    if type(duration) is not int or not 1 <= duration <= 28 or type(adults) is not int or adults < 1:
+    
+    raw_duration = arguments.get("duration_days")
+    try:
+        duration = int(raw_duration) if raw_duration is not None else 5
+    except (ValueError, TypeError):
+        duration = 5
+
+    raw_adults = arguments.get("adults")
+    try:
+        adults = int(raw_adults) if raw_adults is not None else 1
+    except (ValueError, TypeError):
+        adults = 1
+
+    if not (1 <= duration <= 28) or adults < 1:
         return {"error": "Confirm a trip duration of 1-28 days and a positive adult count", "best_flights": [], "flights": []}
     currency = arguments.get("currency") or "USD"
     api_key = os.getenv("SERPAPI_KEY")

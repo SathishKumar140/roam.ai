@@ -21,10 +21,9 @@ Queries specific flights or a bounded sample of travel windows via MCP. A sample
 
 ## Instructions
 1. **Specific Dates**: If the user provides specific departure/return dates, call `search_flights(departure_id, arrival_id, outbound_date, return_date)`.
-2. **Find Cheapest / Suggest Dates across Month**: If the user asks for the cheapest dates, asks to suggest dates, or gives a month (e.g. "cheapest for 5 days next month"):
-  - Establish the route, explicit year/month, duration, traveler count and requested currency first.
-   - Call `search_cheapest_flights_in_month(departure_id, arrival_id, month, duration_days)`.
-   - Present the recommended cheapest dates, price comparisons across the tested windows, and top flight options!
+2. **Find Cheapest / Suggest Dates across Month**: If the user asks for the cheapest dates, asks to suggest dates, or gives a duration and month (e.g. "five days in November", "cheapest for 5 days next month"):
+   - When departure, destination, month, and duration are known, immediately call `search_cheapest_flights_in_month(departure_id, arrival_id, month, duration_days)`. Default adults to 1 if not specified. Do not defer or block searching by asking for traveler count or currency.
+   - Present the recommended cheapest dates, price comparisons across the tested windows, and top flight options with airlines, dates, and fares!
 3. **Completely Missing Route/City**: If departure or destination is completely unknown, clarify the missing city.
 4. Format response highlighting the best travel dates, prices, carrier, departure times, and total travel time.
 5. The actual tool schema is authoritative. Supply departure_evidence_id and departure_text from this topic's user messages. Never default to SIN, a currency, or another trip's origin.

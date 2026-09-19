@@ -60,7 +60,7 @@ def progress_stage(progress, name):
 
 
 class Turn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
     speaker: str
     text: str
     group: str = "main"
@@ -95,23 +95,23 @@ class Criterion(BaseModel):
     verdict: Literal["pass", "fail", "uncertain", "not_exercised"]
     score: int = Field(ge=0, le=4)
     explanation: str
-    evidence_ids: list[str]
+    evidence_ids: list[str] = Field(default_factory=list)
 
 
 class Finding(BaseModel):
     severity: Literal["critical", "high", "medium", "low"]
     title: str
     explanation: str
-    evidence_ids: list[str]
-    recommendation: str
+    evidence_ids: list[str] = Field(default_factory=list)
+    recommendation: str = ""
 
 
 class Judgment(BaseModel):
     summary: str
     criteria: list[Criterion]
-    findings: list[Finding]
-    strengths: list[str]
-    coverage_gaps: list[str]
+    findings: list[Finding] = Field(default_factory=list)
+    strengths: list[str] = Field(default_factory=list)
+    coverage_gaps: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def check_verdict_scores(self):
@@ -160,17 +160,16 @@ def load_scenarios(path):
     return scenarios
 
 
-def compact_schema(schema):
+def compact_schema(schema, is_top=True):
     if isinstance(schema, list):
-        return [compact_schema(item) for item in schema]
+        return [compact_schema(item, is_top=False) for item in schema]
     if not isinstance(schema, dict):
         return schema
     return {
-        key: ({name: compact_schema(value) for name, value in child.items()} if key == "properties" else compact_schema(child))
+        key: ({name: compact_schema(value, is_top=False) for name, value in child.items()} if key == "properties" else compact_schema(child, is_top=False))
         for key, child in schema.items()
         if key
         not in {
-            "title",
             "default",
             "minimum",
             "maximum",
@@ -181,6 +180,7 @@ def compact_schema(schema):
             "pattern",
             "additionalProperties",
         }
+        and not (key == "title" and not is_top)
     }
 
 

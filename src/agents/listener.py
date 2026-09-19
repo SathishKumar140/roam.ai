@@ -22,6 +22,7 @@ For ambiguous edits such as 'Make that 3', set clarification_question to ask wha
 refers to. Do not assume travelers, nights, money, votes, or poll options. A recent vote is not
 permission to change a poll. Do not invent an option such as 'Other time'. Ambiguous edits are
 questions awaiting clarification, never completed decisions or new preferences.
+Do not use clarification_question for trip planning or search requests (e.g. flight searches, hotel searches, itineraries, recommendations); let the planner execute searches and handle date flexibility. Leave clarification_question empty ("") unless there is an ambiguous edit or unclear target.
 Consider the whole discussion: two friends considering places or sports may benefit from help
 even without mentioning RoamAI. Casual chat, jokes, resolved decisions and ignored offers need silence.
 Offer one short, friendly question at a useful pause, never a full plan or an assertion of action.
@@ -63,8 +64,8 @@ class GroupListener:
 
             self.model = get_llm(allow_fake=False)
         schema = Observation.model_json_schema()
-        message_ids = sorted({message["id"] for message in context.get("messages", []) + batch})
-        batch_ids = sorted({message["id"] for message in batch})
+        message_ids = sorted({str(message["id"]) for message in context.get("messages", []) + batch})
+        batch_ids = sorted({str(message["id"]) for message in batch})
         topic_ids = [topic["id"] for topic in context.get("topics", [])]
         if topic_ids:
             schema["properties"]["comparison_topic_ids"]["items"]["enum"] = topic_ids
@@ -82,16 +83,16 @@ class GroupListener:
             schema["properties"]["preferences"]["maxItems"] = 0
             schema["properties"]["facts"]["maxItems"] = 0
 
-        def transport_schema(value):
+        def transport_schema(value, is_top=True):
             if isinstance(value, dict):
                 return {
-                    key: transport_schema(child)
+                    key: transport_schema(child, is_top=False)
                     for key, child in value.items()
                     if key not in {"default", "maxLength", "minLength", "maxItems", "minItems"}
-                    and not (key == "title" and isinstance(child, str))
+                    and not (key == "title" and isinstance(child, str) and not is_top)
                 }
             if isinstance(value, list):
-                return [transport_schema(child) for child in value]
+                return [transport_schema(child, is_top=False) for child in value]
             return value
 
         result = await self.model.with_structured_output(transport_schema(schema)).ainvoke(

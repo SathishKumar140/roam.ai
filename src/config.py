@@ -84,7 +84,11 @@ def get_llm(provider: Optional[str] = None, *, allow_fake: bool = True):
         try:
             from langchain_openai import ChatOpenAI
 
-            return ChatOpenAI(model=settings.OPENAI_MODEL, api_key=settings.OPENAI_API_KEY, temperature=0.4)
+            model_name = settings.OPENAI_MODEL
+            kwargs = {"model": model_name, "api_key": settings.OPENAI_API_KEY}
+            if not any(model_name.startswith(p) for p in ("gpt-6", "o1", "o3", "o4")):
+                kwargs["temperature"] = 0.4
+            return ChatOpenAI(**kwargs)
         except Exception:
             pass
 

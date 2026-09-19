@@ -93,16 +93,25 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                 props = data.get("properties", [])
                 if props:
                     properties = []
-                    for hotel in props:
+                    for hotel in props[:8]:
                         public_link = hotel.get("link")
-                        properties.append(
-                            {
-                                **{key: value for key, value in hotel.items() if key != "serpapi_property_details_link"},
-                                "link": public_link
-                                or "https://www.google.com/travel/hotels?" + urlencode({"q": f"{hotel.get('name', '')} {loc}"}),
-                                "link_type": "hotel_website" if public_link else "public_hotel_search",
+                        cleaned = {
+                            key: value
+                            for key, value in hotel.items()
+                            if key
+                            not in {
+                                "serpapi_property_details_link",
+                                "serpapi_google_hotels_reviews_link",
+                                "serpapi_google_hotels_photos_link",
+                                "images",
                             }
+                        }
+                        cleaned["link"] = (
+                            public_link
+                            or "https://www.google.com/travel/hotels?" + urlencode({"q": f"{hotel.get('name', '')} {loc}"})
                         )
+                        cleaned["link_type"] = "hotel_website" if public_link else "public_hotel_search"
+                        properties.append(cleaned)
                     return {
                         "source": "mcp_travelassistant_live_google_hotels",
                         "search_metadata": search_metadata,

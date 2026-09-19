@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class PreferenceUpdate(BaseModel):
@@ -48,6 +48,27 @@ class Observation(BaseModel):
     summary: str = Field(default="", max_length=2000)
     intent: Literal["social", "planning", "expense", "poll", "question"] = "social"
     decision: Literal["silent", "offer", "respond", "decline"] = "silent"
+
+    @field_validator("intent", mode="before")
+    @classmethod
+    def normalize_intent(cls, val):
+        if val in {"social", "planning", "expense", "poll", "question"}:
+            return val
+        if val in {"offer", "plan", "trip"}:
+            return "planning"
+        if val in {"ask", "query"}:
+            return "question"
+        return "social"
+
+    @field_validator("decision", mode="before")
+    @classmethod
+    def normalize_decision(cls, val):
+        if val in {"silent", "offer", "respond", "decline"}:
+            return val
+        if val in {"reply", "answer"}:
+            return "respond"
+        return "silent"
+
     accepts_offer: bool = False
     continues_task: bool = Field(
         default=False,
@@ -55,11 +76,11 @@ class Observation(BaseModel):
     )
     confidence: float = Field(default=0, ge=0, le=1)
     evidence_message_ids: list[str] = Field(
-        default_factory=list, max_length=10, description="The 'id' values from supplied messages, not platform message_id values"
+        default_factory=list, max_length=50, description="The 'id' values from supplied messages, not platform message_id values"
     )
     participant_ids: list[str] = Field(default_factory=list, max_length=50)
-    preferences: list[PreferenceUpdate] = Field(default_factory=list, max_length=10)
-    facts: list[TopicFact] = Field(default_factory=list, max_length=15)
+    preferences: list[PreferenceUpdate] = Field(default_factory=list, max_length=20)
+    facts: list[TopicFact] = Field(default_factory=list, max_length=30)
     offer_evidence_message_id: str | None = Field(
         default=None,
         description="Current batch message from the person who paid or requested help; the offer will be addressed to its author",
