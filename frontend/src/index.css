@@ -476,6 +476,16 @@ body {
   color: #7dd3fc;
 }
 
+.markdown-content img {
+  display: block;
+  width: min(100%, 360px);
+  max-height: 220px;
+  object-fit: cover;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
 .markdown-content a.map-location-link,
 .markdown-content a[href*='google.com/maps'],
 .markdown-content a[href*='maps.google.com'] {

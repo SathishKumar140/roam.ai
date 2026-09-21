@@ -15,6 +15,8 @@ def test_hotel_search_preserves_traveler_count_dates_and_currency(monkeypatch):
             {
                 "name": "Provider hotel",
                 "link": "https://example.com/hotel",
+                "images": [{"thumbnail": "https://images.example.com/hotel.jpg"}],
+                "gps_coordinates": {"latitude": 35.0, "longitude": 139.0},
                 "serpapi_property_details_link": "https://serpapi.com/search.json?property_token=private",
             },
             {"name": "Search-only hotel", "serpapi_property_details_link": "https://serpapi.com/search.json?property_token=other"},
@@ -41,6 +43,8 @@ def test_hotel_search_preserves_traveler_count_dates_and_currency(monkeypatch):
     assert result["search_metadata"]["adults"] == 1
     assert result["properties"][0]["link"] == "https://example.com/hotel"
     assert result["properties"][0]["link_type"] == "hotel_website"
+    assert result["properties"][0]["image_url"] == "https://images.example.com/hotel.jpg"
+    assert result["properties"][0]["google_maps_url"].startswith("https://www.google.com/maps/search/?api=1&query=Provider+hotel%2C+")
     assert result["properties"][1]["link"].startswith("https://www.google.com/travel/hotels?q=")
     assert result["properties"][1]["link_type"] == "public_hotel_search"
     assert all("serpapi_property_details_link" not in hotel for hotel in result["properties"])

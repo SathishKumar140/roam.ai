@@ -4,7 +4,7 @@ import json
 import os
 import requests
 from typing import Dict, Any, Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 try:
     import truststore
@@ -106,6 +106,23 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                                 "images",
                             }
                         }
+                        image_url = next(
+                            (
+                                candidate
+                                for image in hotel.get("images", [])
+                                for candidate in [
+                                    image
+                                    if isinstance(image, str)
+                                    else image.get("original") or image.get("thumbnail") or image.get("url", "")
+                                ]
+                                if urlsplit(candidate).scheme == "https"
+                                and urlsplit(candidate).hostname
+                                and urlsplit(candidate).hostname != "serpapi.com"
+                            ),
+                            None,
+                        )
+                        if image_url:
+                            cleaned["image_url"] = image_url
                         cleaned["link"] = public_link or "https://www.google.com/travel/hotels?" + urlencode(
                             {"q": f"{hotel.get('name', '')} {loc}"}
                         )
@@ -116,8 +133,10 @@ def search_hotels_handler(arguments: Dict[str, Any]) -> Dict[str, Any]:
                         lat = gps.get("latitude")
                         lon = gps.get("longitude")
                         hotel_name = hotel.get("name", "")
-                        if lat and lon:
-                            cleaned["google_maps_url"] = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+                        if lat is not None and lon is not None:
+                            cleaned["google_maps_url"] = "https://www.google.com/maps/search/?" + urlencode(
+                                {"api": "1", "query": f"{hotel_name}, {lat}, {lon}"}
+                            )
                         else:
                             cleaned["google_maps_url"] = "https://www.google.com/maps/search/?" + urlencode(
                                 {"api": "1", "query": f"{hotel_name} {loc}"}

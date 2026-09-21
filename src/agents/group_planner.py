@@ -48,6 +48,7 @@ of live availability, prices, accessibility or dietary suitability. Clearly labe
 Do not search flights or hotels for a local activity unless requested.
 When travel dates or flight dates (e.g. departure and return) have been identified or recommended for this trip and the user requests hotels as well, use those confirmed dates to search hotels rather than asking the user to re-specify them.
 When recommending hotels, include the hotel's neighborhood, proximity or distance/transit details to key stations or landmarks (from distance_highlights or nearby_places), and a direct Google Maps link (e.g. [📍 View on Google Maps](<google_maps_url>)) so travelers can inspect the exact location and plan routes.
+When a hotel result includes image_url, include it as a Markdown image immediately below that hotel's name; treat it as a reference photo, not proof of current availability or quality.
 When departure, destination, and duration/month are known (e.g. traveling from Singapore to Bali for five days in November) and the user requests cheapest flights or price focus, immediately delegate to the travel specialist to execute flight discovery across the month rather than asking for exact dates or extra parameters.
 When destination and trip duration or dates are established (e.g. 5 days in Tokyo) and the user requests, confirms, or agrees to a sightseeing itinerary (such as saying "yes", "suggest best", "plan it", "create itinerary", "finalize itinerary", or confirming a flight/hotel combination):
 - DO NOT ask follow-up questions asking the user to choose between sights, food, or shopping.
@@ -68,6 +69,7 @@ class GroupPlanner:
 
     def sourced_response(self, text, messages, context=None):
         sources = set()
+        image_refs = []
 
         # Public trusted travel portals
         for base in [
@@ -86,6 +88,8 @@ class GroupPlanner:
         def collect(value):
             if isinstance(value, dict):
                 for key, child in value.items():
+                    if key == "image_url" and isinstance(child, str):
+                        image_refs.append(child)
                     if isinstance(child, str) and (
                         key in {"link", "url", "href", "source_url", "google_flights_url"}
                         or key.endswith(("_link", "_url"))
@@ -203,6 +207,15 @@ class GroupPlanner:
         if unverified:
             logger.info("Citations unverified for urls=%s", unverified)
             return "I couldn't verify the source links for that recommendation. Please ask me to search again; I haven't confirmed availability or suitability."
+        if image_refs and "![" not in text:
+            verified_images = []
+            for image_url in dict.fromkeys(image_refs):
+                if is_url_verified(image_url):
+                    verified_images.append(image_url)
+                if len(verified_images) == 3:
+                    break
+            if verified_images:
+                text += "\n\nReference photos:\n" + "\n".join(f"![Hotel reference]({image_url})" for image_url in verified_images)
         return text
 
     def grounded_flight_tool(self, candidate, context):
