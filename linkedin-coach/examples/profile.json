@@ -1,0 +1,12 @@
+{
+  "name": "Sample Person",
+  "headline": "Software Engineer at Acme",
+  "summary": "Passionate, results-driven engineer.",
+  "location": "Chennai, India",
+  "positions": [
+    {"company": "Acme", "title": "Software Engineer", "description": "Built backend services.", "started": "Jan 2022", "finished": ""},
+    {"company": "Globex", "title": "Intern", "description": "", "started": "Jun 2019", "finished": "Aug 2019"}
+  ],
+  "education": ["Anna University"],
+  "skills": ["Python", "SQL", "Docker"]
+}
